@@ -1,6 +1,8 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
+import tz as _tz
+
 from telegram.ext import ContextTypes
 
 import auth
@@ -25,7 +27,7 @@ async def auth_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     if auth.get_refresh_token():
         _last_auth_reminder = None  # reset so next de-auth triggers immediately
         return
-    now = datetime.now()
+    now = _tz.now()
     if _last_auth_reminder is None or now - _last_auth_reminder >= timedelta(minutes=20):
         await context.bot.send_message(
             chat_id=context.job.data,
@@ -120,7 +122,7 @@ async def daily_summary(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = context.job.data
     if not chat_id:
         return
-    today = datetime.now().strftime("%A, %d de %B")
+    today = _tz.now().strftime("%A, %d de %B")
     await context.bot.send_message(
         chat_id=chat_id,
         text=f"Buenos dias. Hoy es {today}.",

@@ -1,6 +1,7 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 import auth
+import tz as _tz
 from calendar_tools import list_events
 from formatting import (
     SEP,
@@ -16,9 +17,9 @@ from tasks_tools import list_tasks
 
 
 def _fmt_event_time(raw: str) -> str:
-    today = date.today()
+    today = _tz.now().date()
     if "T" in raw:
-        dt = datetime.fromisoformat(raw).astimezone()
+        dt = datetime.fromisoformat(raw).astimezone(_tz.LIMA)
         if dt.date() == today:
             return dt.strftime("%H:%M")
         mes = _MESES_CORTOS[dt.month - 1]
@@ -35,7 +36,7 @@ def _fmt_event_time(raw: str) -> str:
 
 def build_digest() -> str:
     """Build the daily digest in MarkdownV2 format."""
-    now = datetime.now()
+    now = _tz.now()
     lines = [bold(fecha_es(now)), ""]
 
     # ── Calendario ────────────────────────────────────────────────────────────
@@ -43,9 +44,8 @@ def build_digest() -> str:
         lines.append(italic("Calendario no autenticado — usa /login"))
     else:
         try:
-            now_utc = datetime.now(timezone.utc)
-            time_min = now_utc.isoformat()
-            time_max = (now_utc + timedelta(days=3)).isoformat()
+            time_min = now.isoformat()
+            time_max = (now + timedelta(days=3)).isoformat()
             events = list_events(max_results=7, time_min=time_min, time_max=time_max)
             lines.append(f"📅 {bold('Próximos eventos')}")
             lines.append(SEP)

@@ -18,6 +18,8 @@ import dataclasses
 import json
 import logging
 from datetime import datetime
+
+import tz as _tz
 from typing import Any
 
 import llm
@@ -29,7 +31,7 @@ from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
 
 
 def _system_prompt() -> str:
-    now = datetime.now().strftime("%A, %d de %B de %Y, %H:%M")
+    now = _tz.now().strftime("%A, %d de %B de %Y, %H:%M")
     base = (
         f"Eres un asistente personal. Hoy es {now}. "
         "Tienes acceso al Google Calendar del usuario, su lista de tareas y su backlog. "
