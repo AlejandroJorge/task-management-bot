@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from datetime import time
 
 from telegram import Update
@@ -13,6 +14,7 @@ from jobs import auth_check, digest_job, event_notifier
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
+    stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
 
