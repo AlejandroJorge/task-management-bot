@@ -18,10 +18,12 @@ def create_task(title: str, notes: str = "", due: str | None = None) -> int:
 
 
 def list_tasks(show_done: bool = False) -> list[dict]:
-    """Return all tasks, optionally including completed ones."""
+    """Return tasks sorted by due date ascending; tasks without due date go last."""
     with _db() as db:
         docs = db.all() if show_done else db.search(Task.done == False)  # noqa: E712
-        return [{"doc_id": d.doc_id, **d} for d in docs]
+        tasks = [{"doc_id": d.doc_id, **d} for d in docs]
+    tasks.sort(key=lambda t: (t.get("due") is None, t.get("due") or ""))
+    return tasks
 
 
 def update_task(doc_id: int, **fields) -> None:
