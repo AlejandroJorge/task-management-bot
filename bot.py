@@ -60,6 +60,11 @@ def main() -> None:
     evening_hour = int(os.getenv("EVENING_DIGEST_HOUR", "20"))
     jq.run_daily(digest_job, time=time(evening_hour, 0), data=chat_id, name="evening_digest")
 
+    async def on_startup(app):
+        await app.bot.send_message(chat_id=chat_id, text="He sido reiniciado.")
+
+    app.post_init = on_startup
+
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
