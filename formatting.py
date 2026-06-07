@@ -1,4 +1,8 @@
 """MarkdownV2 helpers for bot-generated messages."""
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
+_LIMA = ZoneInfo("America/Lima")
 
 SEP = "──────────────"  # Unicode line, safe in MarkdownV2 (no escaping needed)
 
@@ -39,8 +43,6 @@ def fecha_es(dt) -> str:
 
 def fmt_due(due_str: str) -> str:
     """Format an ISO due date as a short readable string, e.g. '7 de junio' or '7 de junio, 23:59'."""
-    from datetime import date, datetime
-    from tz import LIMA
     try:
         has_time = "T" in due_str or (" " in due_str.strip() and ":" in due_str)
         if has_time:
@@ -49,7 +51,7 @@ def fmt_due(due_str: str) -> str:
             if dt_utc.hour == 0 and dt_utc.minute == 0 and dt_utc.second == 0:
                 mes = _MESES[dt_utc.month - 1]
                 return f"{dt_utc.day} de {mes}"
-            dt = dt_utc.astimezone(LIMA)
+            dt = dt_utc.astimezone(_LIMA)
             mes = _MESES[dt.month - 1]
             return f"{dt.day} de {mes}, {dt.hour:02d}:{dt.minute:02d}"
         else:

@@ -40,7 +40,6 @@ def _service():
 
 
 def get_event(event_id: str) -> dict:
-    """Fetch a single event by ID."""
     return _service().events().get(calendarId=CALENDAR_ID, eventId=event_id).execute()
 
 
@@ -50,18 +49,14 @@ def create_event(
     end: str,
     description: str = "",
     location: str = "",
-    timezone: str = "UTC",
+    tz: str = "America/Lima",
 ) -> dict:
-    """
-    Create an event. start/end are ISO 8601 strings with offset,
-    e.g. "2026-06-07T14:00:00-05:00". Returns the created event dict.
-    """
     body = {
         "summary": summary,
         "description": description,
         "location": location,
-        "start": {"dateTime": start, "timeZone": timezone},
-        "end": {"dateTime": end, "timeZone": timezone},
+        "start": {"dateTime": start, "timeZone": tz},
+        "end": {"dateTime": end, "timeZone": tz},
     }
     return _service().events().insert(calendarId=CALENDAR_ID, body=body).execute()
 
@@ -71,10 +66,6 @@ def list_events(
     time_min: str | None = None,
     time_max: str | None = None,
 ) -> list[dict]:
-    """
-    Return events ordered by start time.
-    time_min defaults to now (UTC). time_max optionally caps the window.
-    """
     if time_min is None:
         time_min = datetime.now(tz=timezone.utc).isoformat()
     kwargs: dict = dict(
@@ -98,12 +89,6 @@ def list_events(
 
 
 def update_event(event_id: str, **fields) -> dict:
-    """
-    Patch an existing event by ID. Accepted keyword args:
-      summary, description, location   → plain strings
-      start, end                        → ISO 8601 datetime strings
-    Returns the updated event dict.
-    """
     body: dict = {}
     for key in ("summary", "description", "location"):
         if key in fields:
@@ -120,5 +105,4 @@ def update_event(event_id: str, **fields) -> dict:
 
 
 def delete_event(event_id: str) -> None:
-    """Permanently delete an event by its ID."""
     _service().events().delete(calendarId=CALENDAR_ID, eventId=event_id).execute()

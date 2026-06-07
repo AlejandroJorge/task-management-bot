@@ -5,7 +5,6 @@ from datetime import time
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from telegram.ext.filters import User
 
 import auth
 from handlers import authcode, backlog, clear, handle_message, help_command, login, ls, start
@@ -24,7 +23,7 @@ def main() -> None:
     allowed_user_id = int(os.environ["ALLOWED_USER_ID"])
     chat_id = str(allowed_user_id)
 
-    me = User(user_id=allowed_user_id)
+    me = filters.User(user_id=allowed_user_id)
 
     app = Application.builder().token(token).build()
 

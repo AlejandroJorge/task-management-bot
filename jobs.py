@@ -117,13 +117,3 @@ async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:
         await _maybe_notify(f"task_{task['doc_id']}", task["title"], due_dt, " (tarea)")
 
 
-async def daily_summary(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Runs once per day at a scheduled time."""
-    chat_id = context.job.data
-    if not chat_id:
-        return
-    today = _tz.now().strftime("%A, %d de %B")
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=f"Buenos dias. Hoy es {today}.",
-    )

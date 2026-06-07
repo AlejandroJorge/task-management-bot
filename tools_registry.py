@@ -28,7 +28,7 @@ TOOLS = [
                     "end":         {"type": "string", "description": "End datetime, ISO 8601 with offset"},
                     "description": {"type": "string"},
                     "location":    {"type": "string"},
-                    "timezone":    {"type": "string", "default": "UTC"},
+                    "tz":          {"type": "string", "default": "America/Lima"},
                 },
                 "required": ["summary", "start", "end"],
             },

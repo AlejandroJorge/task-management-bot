@@ -20,10 +20,6 @@ async def chat(
     tools: list[dict] | None = None,
     model: str = "deepseek-chat",
 ) -> dict:
-    """
-    Send messages to DeepSeek and return the raw response message as a dict.
-    If tools are provided, the model may return tool_calls instead of content.
-    """
     kwargs: dict = {"model": model, "messages": messages}
     if tools:
         kwargs["tools"] = tools
@@ -32,7 +28,6 @@ async def chat(
     response = await _get_client().chat.completions.create(**kwargs)
     msg = response.choices[0].message
 
-    # Normalise to a plain dict so callers don't depend on the SDK model
     result: dict = {"role": msg.role, "content": msg.content or ""}
     if msg.tool_calls:
         result["tool_calls"] = [
