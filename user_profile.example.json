@@ -1,0 +1,17 @@
+{
+  "name": "Jorge",
+  "location": "Lima, Perú",
+  "timezone_label": "UTC-5 (hora Lima)",
+  "education": "PUCP, Ingeniería Informática, Xº ciclo",
+  "work": "Novatech, Miraflores — breve descripción del rol",
+  "schedule": {
+    "work_days": "lunes a viernes",
+    "work_hours": "09:00–18:00",
+    "class_days": "ejemplo: martes y jueves"
+  },
+  "facts": [
+    "Hecho libre 1 — e.g. proyectos actuales",
+    "Hecho libre 2 — e.g. preferencias",
+    "Hecho libre 3"
+  ]
+}

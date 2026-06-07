@@ -20,6 +20,7 @@ import logging
 from datetime import datetime
 
 import tz as _tz
+import user_profile
 from typing import Any
 
 import llm
@@ -43,6 +44,7 @@ def _system_prompt() -> str:
         "(3) Solo usa formato con hora (YYYY-MM-DDTHH:MM:SSZ) si el usuario dice hora explícita (ej. 'a las 3pm'). "
         "(4) NUNCA uses T00:00:00Z ni ninguna hora inventada. "
         "Responde siempre en español. "
+        "Usa el contexto del usuario para personalizar respuestas (horario, ubicación, etc.). "
         "Usa Markdown de Telegram (v1): *negrita* con un solo asterisco, _cursiva_ con guion bajo. "
         "NUNCA uses ** para negrita ni __ para subrayado — Telegram no los soporta. "
         "Puedes usar emojis ligeros como titular de sección (ej. ✅ para tareas, 📅 para eventos). "
@@ -50,6 +52,9 @@ def _system_prompt() -> str:
         "NUNCA menciones doc_id, event_id ni ningún identificador interno al usuario. "
         "Refierete a tareas y eventos solo por su nombre."
     )
+    profile_ctx = user_profile.as_context()
+    if profile_ctx:
+        base += "\n\n" + profile_ctx
     try:
         tasks = list_tasks(show_done=False)
         if tasks:
