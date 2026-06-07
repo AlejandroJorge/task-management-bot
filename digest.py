@@ -16,17 +16,21 @@ from formatting import (
 from tasks_tools import list_tasks
 
 
-def _fmt_event_time(raw: str) -> str:
+def _fmt_event_time(start_raw: str, end_raw: str = "") -> str:
     today = _tz.now().date()
-    if "T" in raw:
-        dt = datetime.fromisoformat(raw).astimezone(_tz.LIMA)
-        if dt.date() == today:
-            return dt.strftime("%H:%M")
-        mes = _MESES_CORTOS[dt.month - 1]
-        dia = _DIAS_CORTOS[dt.weekday()]
-        return f"{dia} {dt.day} {mes}, {dt.strftime('%H:%M')}"
+    if "T" in start_raw:
+        dt_start = datetime.fromisoformat(start_raw).astimezone(_tz.LIMA)
+        time_str = dt_start.strftime("%H:%M")
+        if end_raw and "T" in end_raw:
+            dt_end = datetime.fromisoformat(end_raw).astimezone(_tz.LIMA)
+            time_str += f"–{dt_end.strftime('%H:%M')}"
+        if dt_start.date() == today:
+            return time_str
+        mes = _MESES_CORTOS[dt_start.month - 1]
+        dia = _DIAS_CORTOS[dt_start.weekday()]
+        return f"{dia} {dt_start.day} {mes}, {time_str}"
     else:
-        d = date.fromisoformat(raw[:10])
+        d = date.fromisoformat(start_raw[:10])
         if d == today:
             return "Todo el día"
         mes = _MESES_CORTOS[d.month - 1]
@@ -51,8 +55,9 @@ def build_digest() -> str:
             lines.append(SEP)
             if events:
                 for e in events:
-                    raw = e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", "")
-                    t_str = _fmt_event_time(raw) if raw else "?"
+                    start_raw = e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", "")
+                    end_raw = e.get("end", {}).get("dateTime") or e.get("end", {}).get("date", "")
+                    t_str = _fmt_event_time(start_raw, end_raw) if start_raw else "?"
                     summary = e.get("summary", "(sin título)")
                     lines.append(f"• {esc(t_str)}  {esc(summary)}")
             else:
