@@ -8,7 +8,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.ext.filters import User
 
 from handlers import clear, handle_message, help_command, start
-from jobs import daily_summary, periodic_checkin
+from jobs import daily_summary, task_reminder
 
 load_dotenv()
 
@@ -38,18 +38,19 @@ def main() -> None:
 
     # ── proactive jobs (only if a default chat is configured) ─────────────────
     if chat_id:
+        interval_hours = float(os.getenv("REMINDER_INTERVAL_HOURS", "6"))
         jq = app.job_queue
 
-        # Send a message every hour
+        # Periodic task-list reminder
         jq.run_repeating(
-            periodic_checkin,
-            interval=3600,
+            task_reminder,
+            interval=interval_hours * 3600,
             first=10,
             data=chat_id,
-            name="hourly_checkin",
+            name="task_reminder",
         )
 
-        # Send a daily greeting at 08:00 local time
+        # Daily greeting at 08:00 local time
         jq.run_daily(
             daily_summary,
             time=time(8, 0),
