@@ -57,6 +57,10 @@ async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     try:
         auth.exchange_code(raw)
+        # Clear history so the LLM doesn't see previous failed calendar calls
+        chat_id = update.effective_chat.id
+        _histories[chat_id].clear()
+        _pending.pop(chat_id, None)
         await update.message.reply_text("✅ Authenticated! Google Calendar is ready.")
     except RuntimeError as e:
         await update.message.reply_text(str(e))
