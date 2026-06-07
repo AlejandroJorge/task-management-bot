@@ -16,10 +16,13 @@ Flow:
 
 import dataclasses
 import json
+import logging
 from datetime import datetime
 from typing import Any
 
 import llm
+
+logger = logging.getLogger(__name__)
 from backlog_tools import list_backlog
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
@@ -106,15 +109,19 @@ async def process(
 
         tool_calls = response.get("tool_calls")
         if not tool_calls:
-            return response["content"]
+            reply = response["content"]
+            logger.info("LLM reply: %s", reply.splitlines()[0][:120] if reply else "(empty)")
+            return reply
+
+        logger.info("LLM requested %d tool call(s): %s", len(tool_calls),
+                    ", ".join(tc["function"]["name"] for tc in tool_calls))
 
         for i, tc in enumerate(tool_calls):
             name = tc["function"]["name"]
             args_json = tc["function"]["arguments"]
 
             if name in REQUIRE_CONFIRMATION:
-                # Add placeholders for ALL remaining calls (this one onward)
-                # so history is valid while we wait for user confirmation.
+                logger.info("Pausing for confirmation on destructive call: %s %s", name, args_json)
                 remaining = tool_calls[i:]
                 for r in remaining:
                     history.append(_placeholder(r["id"]))
@@ -130,9 +137,12 @@ async def process(
                     pending_messages=list(history),
                 )
 
+            logger.info("Calling tool: %s %s", name, args_json)
             try:
                 result = dispatch(name, args_json)
+                logger.info("Tool %s result: %s", name, result[:120] if isinstance(result, str) else result)
             except Exception as exc:
+                logger.exception("Tool %s raised an error", name)
                 result = json.dumps({"error": str(exc)})
             history.append({
                 "role": "tool",

@@ -20,9 +20,11 @@ logger = logging.getLogger(__name__)
 
 async def _reply(message, text: str, parse_mode: str = "Markdown") -> None:
     """Send a reply, falling back to plain text if Markdown parsing fails."""
+    logger.info("Sending reply: %s", text.splitlines()[0][:120] if text else "(empty)")
     try:
         await message.reply_text(text, parse_mode=parse_mode)
     except Exception:
+        logger.warning("Markdown parse failed, retrying as plain text")
         await message.reply_text(text)
 
 
