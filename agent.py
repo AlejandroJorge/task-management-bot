@@ -43,7 +43,7 @@ def _system_prompt() -> str:
         "(2) Si menciona una fecha sin hora (ej. 'mañana', 'el lunes'), usa SOLO formato YYYY-MM-DD. "
         "(3) Solo usa formato con hora (YYYY-MM-DDTHH:MM:SSZ) si el usuario dice hora explícita (ej. 'a las 3pm'). "
         "(4) NUNCA uses T00:00:00Z ni ninguna hora inventada. "
-        "Responde siempre en español. "
+        "Responde siempre en español neutro: sin modismos, regionalismos ni expresiones coloquiales de ningún país. "
         "Usa el contexto del usuario para personalizar respuestas (horario, ubicación, etc.). "
         "Usa Markdown de Telegram (v1): *negrita* con un solo asterisco, _cursiva_ con guion bajo. "
         "NUNCA uses ** para negrita ni __ para subrayado — Telegram no los soporta. "
