@@ -49,8 +49,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"1. Abre este enlace y aprueba el acceso:\n{url}\n\n"
         "2. El navegador mostrara un error de conexion — es normal.\n"
         "3. Copia la URL completa de la barra de direcciones y enviala como:\n"
-        "`/authcode <url>`",
-        parse_mode="Markdown",
+        "/authcode <url>"
     )
 
 

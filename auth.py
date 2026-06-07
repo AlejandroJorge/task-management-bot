@@ -44,10 +44,16 @@ def exchange_code(raw: str) -> None:
     if _flow is None:
         raise RuntimeError("No login in progress — send /login first.")
 
-    parsed = urllib.parse.urlparse(raw.strip())
+    raw = raw.strip()
+    parsed = urllib.parse.urlparse(raw)
     params = urllib.parse.parse_qs(parsed.query)
-    code = params["code"][0] if "code" in params else raw.strip()
 
-    _flow.fetch_token(code=code)
+    if "code" in params and parsed.scheme:
+        # Full redirect URL — pass it whole so the library handles state/PKCE
+        _flow.fetch_token(authorization_response=raw)
+    else:
+        # Bare code value
+        _flow.fetch_token(code=raw)
+
     _refresh_token = _flow.credentials.refresh_token
     _flow = None
