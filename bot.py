@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-from handlers import echo, help_command, start
+from handlers import clear, handle_message, help_command, start
 from jobs import daily_summary, periodic_checkin
 
 load_dotenv()
@@ -28,9 +28,10 @@ def main() -> None:
     # ── command handlers ──────────────────────────────────────────────────────
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("clear", clear))
 
     # ── message handlers ──────────────────────────────────────────────────────
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     # ── proactive jobs (only if a default chat is configured) ─────────────────
     if chat_id:
