@@ -82,8 +82,12 @@ async def process(
                     pending_messages=list(history),
                 )
 
-            # Execute safe tool and append result
-            result = dispatch(name, args_json)
+            # Execute safe tool and always append a tool message so history
+            # stays valid even when the call raises (e.g. calendar not authed)
+            try:
+                result = dispatch(name, args_json)
+            except Exception as exc:
+                result = json.dumps({"error": str(exc)})
             history.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
@@ -121,7 +125,10 @@ async def resume_after_confirmation(
         if not response.get("tool_calls"):
             return response["content"]
         for tc in response["tool_calls"]:
-            result = dispatch(tc["function"]["name"], tc["function"]["arguments"])
+            try:
+                result = dispatch(tc["function"]["name"], tc["function"]["arguments"])
+            except Exception as exc:
+                result = json.dumps({"error": str(exc)})
             history.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
