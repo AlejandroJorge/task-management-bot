@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 import agent
 import auth
 from agent import ConfirmationRequest
+from digest import build_digest
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "/start    — greet\n"
         "/help     — this message\n"
+        "/ls       — today's events + pending tasks\n"
         "/clear    — reset conversation history\n"
         "/login    — re-authenticate Google Calendar\n"
         "/authcode — finish login (paste URL from browser)\n\n"
@@ -67,6 +69,10 @@ async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.exception("Auth exchange failed")
         await update.message.reply_text(f"Auth failed: {e}")
+
+
+async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(build_digest(), parse_mode="Markdown")
 
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

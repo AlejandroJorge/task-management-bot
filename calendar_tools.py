@@ -49,22 +49,31 @@ def create_event(
     return _service().events().insert(calendarId=CALENDAR_ID, body=body).execute()
 
 
-def list_events(max_results: int = 10, time_min: str | None = None) -> list[dict]:
+def list_events(
+    max_results: int = 10,
+    time_min: str | None = None,
+    time_max: str | None = None,
+) -> list[dict]:
     """
-    Return upcoming events ordered by start time.
-    time_min defaults to now (UTC). Returns a list of event dicts.
+    Return events ordered by start time.
+    time_min defaults to now (UTC). time_max optionally caps the window.
     """
     if time_min is None:
         time_min = datetime.now(tz=timezone.utc).isoformat()
+    kwargs: dict = dict(
+        calendarId=CALENDAR_ID,
+        timeMin=time_min,
+        maxResults=max_results,
+        singleEvents=True,
+        orderBy="startTime",
+    )
+    if time_max:
+        kwargs["timeMax"] = time_max
     result = (
         _service()
         .events()
         .list(
-            calendarId=CALENDAR_ID,
-            timeMin=time_min,
-            maxResults=max_results,
-            singleEvents=True,
-            orderBy="startTime",
+            **kwargs,
         )
         .execute()
     )
