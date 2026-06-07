@@ -11,7 +11,6 @@ from digest import build_digest
 
 logger = logging.getLogger(__name__)
 
-# Per-chat state (lives for the process lifetime)
 _histories: dict[int, list[dict]] = defaultdict(list)
 _pending: dict[int, ConfirmationRequest] = {}
 
@@ -21,20 +20,22 @@ _NO  = {"n", "no", "nope", "cancel", "nah"}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "Hi! I'm your personal assistant. Tell me what you need — "
-        "I can manage your Google Calendar and task list."
+        "Hola. Soy tu asistente personal.\n"
+        "Puedo gestionar tu Google Calendar y tu lista de tareas.\n"
+        "Escribe lo que necesitas."
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "/start    — greet\n"
-        "/help     — this message\n"
-        "/ls       — today's events + pending tasks\n"
-        "/clear    — reset conversation history\n"
-        "/login    — re-authenticate Google Calendar\n"
-        "/authcode — finish login (paste URL from browser)\n\n"
-        "Just write naturally — I'll figure out what to do."
+        "*Comandos disponibles*\n\n"
+        "/ls — resumen del dia: eventos y tareas\n"
+        "/clear — borrar historial de conversacion\n"
+        "/login — autenticar Google Calendar\n"
+        "/authcode — completar login (pegar URL del navegador)\n"
+        "/help — este mensaje\n\n"
+        "O escribe directamente lo que necesitas.",
+        parse_mode="Markdown",
     )
 
 
@@ -42,33 +43,33 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         url = auth.generate_auth_url()
     except KeyError as e:
-        await update.message.reply_text(f"Missing env var: {e}. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.")
+        await update.message.reply_text(f"Falta variable de entorno: {e}")
         return
     await update.message.reply_text(
-        f"1. Open this link and approve access:\n{url}\n\n"
-        "2. Your browser will show a connection error — that's expected.\n"
-        "3. Copy the full URL from the address bar and send it here as:\n"
-        "/authcode <url>"
+        f"1. Abre este enlace y aprueba el acceso:\n{url}\n\n"
+        "2. El navegador mostrara un error de conexion — es normal.\n"
+        "3. Copia la URL completa de la barra de direcciones y enviala como:\n"
+        "`/authcode <url>`",
+        parse_mode="Markdown",
     )
 
 
 async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     raw = " ".join(context.args or []).strip()
     if not raw:
-        await update.message.reply_text("Usage: /authcode <url from browser address bar>")
+        await update.message.reply_text("Uso: `/authcode <url del navegador>`", parse_mode="Markdown")
         return
     try:
         auth.exchange_code(raw)
-        # Clear history so the LLM doesn't see previous failed calendar calls
         chat_id = update.effective_chat.id
         _histories[chat_id].clear()
         _pending.pop(chat_id, None)
-        await update.message.reply_text("✅ Authenticated! Google Calendar is ready.")
+        await update.message.reply_text("Autenticado. Google Calendar listo.")
     except RuntimeError as e:
         await update.message.reply_text(str(e))
     except Exception as e:
         logger.exception("Auth exchange failed")
-        await update.message.reply_text(f"Auth failed: {e}")
+        await update.message.reply_text(f"Error de autenticacion: {e}")
 
 
 async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -79,7 +80,7 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     _histories[chat_id].clear()
     _pending.pop(chat_id, None)
-    await update.message.reply_text("History cleared.")
+    await update.message.reply_text("Historial borrado.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -90,7 +91,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    # ── confirmation flow ─────────────────────────────────────────────────────
     if chat_id in _pending:
         word = text.lower().split()[0]
         if word in _YES:
@@ -98,29 +98,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif word in _NO:
             confirmed = False
         else:
-            await update.message.reply_text("Please reply yes or no.")
+            await update.message.reply_text("Responde si o no.")
             return
 
         request = _pending.pop(chat_id)
-        reply = await agent.resume_after_confirmation(
-            confirmed, request, _histories[chat_id]
-        )
-        await update.message.reply_text(reply)
+        reply = await agent.resume_after_confirmation(confirmed, request, _histories[chat_id])
+        await update.message.reply_text(reply, parse_mode="Markdown")
         return
 
-    # ── normal message → agent ────────────────────────────────────────────────
     try:
         result = await agent.process(text, _histories[chat_id])
     except Exception as exc:
         logger.exception("Agent error")
-        await update.message.reply_text(f"Something went wrong: {exc}")
+        await update.message.reply_text(f"Error: {exc}")
         return
 
     if isinstance(result, ConfirmationRequest):
         _pending[chat_id] = result
         args_str = ", ".join(f"{k}={v}" for k, v in result.tool_args.items())
         await update.message.reply_text(
-            f"Are you sure you want to run {result.tool_name}({args_str})?\n\nReply yes or no."
+            f"Confirmas ejecutar `{result.tool_name}` con:\n{args_str}\n\nResponde *si* o *no*.",
+            parse_mode="Markdown",
         )
     else:
-        await update.message.reply_text(result)
+        await update.message.reply_text(result, parse_mode="Markdown")

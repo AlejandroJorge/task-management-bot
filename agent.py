@@ -25,12 +25,14 @@ from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
 
 
 def _system_prompt() -> str:
-    now = datetime.now().strftime("%A, %B %d %Y, %H:%M")
+    now = datetime.now().strftime("%A, %d de %B de %Y, %H:%M")
     return (
-        f"You are a personal assistant. Today is {now}. "
-        "You have access to the user's Google Calendar and a personal task list. "
-        "Interpret natural language requests and call the appropriate tools. "
-        "Be concise in your final responses."
+        f"Eres un asistente personal. Hoy es {now}. "
+        "Tienes acceso al Google Calendar del usuario y a su lista de tareas. "
+        "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
+        "Responde siempre en español. "
+        "Usa markdown minimalista: negritas y listas cuando ayuden, sin emojis, sin encabezados grandes. "
+        "Respuestas cortas y directas."
     )
 
 

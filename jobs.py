@@ -22,7 +22,7 @@ async def auth_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     if _last_auth_reminder is None or now - _last_auth_reminder >= timedelta(minutes=20):
         await context.bot.send_message(
             chat_id=context.job.data,
-            text="⚠️ Google Calendar is not authenticated. Send /login to connect.",
+            text="Google Calendar no esta autenticado. Usa /login para conectarlo.",
         )
         _last_auth_reminder = now
 
@@ -39,14 +39,14 @@ async def task_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends pending tasks to the owner on a repeating interval."""
     tasks = list_tasks(show_done=False)
     if not tasks:
-        text = "✅ No pending tasks right now."
+        text = "Sin tareas pendientes."
     else:
-        lines = [f"📋 *Pending tasks* ({datetime.now().strftime('%H:%M')})\n"]
+        lines = [f"*Tareas pendientes* — {datetime.now().strftime('%H:%M')}\n"]
         for t in tasks:
-            due = f"  — due {t['due']}" if t.get("due") else ""
-            lines.append(f"• [{t.doc_id}] {t['title']}{due}")
+            due = f"  — vence {t['due']}" if t.get("due") else ""
+            lines.append(f"- [{t.doc_id}] {t['title']}{due}")
             if t.get("notes"):
-                lines.append(f"    _{t['notes']}_")
+                lines.append(f"  _{t['notes']}_")
         text = "\n".join(lines)
     await context.bot.send_message(
         chat_id=context.job.data, text=text, parse_mode="Markdown"
@@ -58,8 +58,8 @@ async def daily_summary(context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = context.job.data
     if not chat_id:
         return
-    today = datetime.now().strftime("%A, %B %d")
+    today = datetime.now().strftime("%A, %d de %B")
     await context.bot.send_message(
         chat_id=chat_id,
-        text=f"Good morning! Today is {today}. Have a great day.",
+        text=f"Buenos dias. Hoy es {today}.",
     )
