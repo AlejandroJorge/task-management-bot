@@ -149,6 +149,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not text:
         return
 
+    logger.info("Message from %s: %s", chat_id, text[:80])
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
     if chat_id in _pending:
@@ -169,7 +170,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     try:
         result = await agent.process(text, _histories[chat_id])
     except Exception as exc:
-        logger.exception("Agent error")
+        logger.exception("Agent error for message: %s", text[:80])
         await update.message.reply_text(f"Error: {exc}")
         return
 

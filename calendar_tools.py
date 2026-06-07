@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime, timezone
 
@@ -7,6 +8,8 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 import auth
+
+logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
@@ -27,6 +30,7 @@ def _service():
     try:
         creds.refresh(Request())
     except RefreshError:
+        logger.error("Google credentials refresh failed — token revoked or expired.")
         auth.clear_token()
         raise RuntimeError(
             "Las credenciales de Google expiraron o fueron revocadas. "
