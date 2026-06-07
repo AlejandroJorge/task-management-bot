@@ -78,15 +78,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         url = auth.generate_auth_url()
+    except RuntimeError as e:
+        await update.message.reply_text(str(e))
+        return
     except KeyError as e:
         await update.message.reply_text(f"Falta variable de entorno: {e}")
         return
     await update.message.reply_text(
-        f"1. Abre este enlace y aprueba el acceso:\n{url}\n\n"
-        "2. El navegador mostrara un error de conexion — es normal.\n"
-        "3. Copia la URL completa de la barra de direcciones y enviala como:\n"
-        "/authcode <url>"
+        f"Abre este enlace y aprueba el acceso:\n{url}\n\n"
+        "Cuando completes el proceso, te confirmo aqui."
     )
+    try:
+        await auth.await_login_result()
+        chat_id = update.effective_chat.id
+        _histories[chat_id].clear()
+        _pending.pop(chat_id, None)
+        await update.message.reply_text("Autenticado. Google Calendar listo.")
+    except RuntimeError as e:
+        await update.message.reply_text(str(e))
+    except Exception as e:
+        logger.exception("Login failed")
+        await update.message.reply_text(f"Error de autenticacion: {e}")
 
 
 async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -56,11 +56,16 @@ def main() -> None:
     jq.run_daily(digest_job, time=time(evening_hour, 0), data=chat_id, name="evening_digest")
 
     async def on_startup(app):
+        await auth.start_callback_server()
         if auth.load_saved_token():
             logger.info("Refresh token restored from DB.")
         await app.bot.send_message(chat_id=chat_id, text="He sido reiniciado.")
 
+    async def on_shutdown(app):
+        await auth.stop_callback_server()
+
     app.post_init = on_startup
+    app.post_shutdown = on_shutdown
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

@@ -2,7 +2,7 @@ import os
 
 from tinydb import Query, TinyDB
 
-DB_PATH = os.getenv("TASKS_DB_PATH", "tasks.json")
+DB_PATH = os.getenv("TASKS_DB_PATH", "data/tasks.json")
 
 Task = Query()
 

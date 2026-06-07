@@ -2,7 +2,7 @@ import os
 
 from tinydb import TinyDB
 
-DB_PATH = os.getenv("BACKLOG_DB_PATH", "backlog.json")
+DB_PATH = os.getenv("BACKLOG_DB_PATH", "data/backlog.json")
 
 
 def _db() -> TinyDB:

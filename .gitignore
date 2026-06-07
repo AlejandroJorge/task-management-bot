@@ -3,4 +3,7 @@
 __pycache__/
 *.pyc
 client_secret.json
+data/
+auth.json
 tasks.json
+backlog.json
