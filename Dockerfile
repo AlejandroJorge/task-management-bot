@@ -14,6 +14,5 @@ RUN mkdir -p /app/data
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 
-VOLUME ["/app/data"]
 
 CMD ["python", "bot.py"]
