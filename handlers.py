@@ -72,7 +72,7 @@ async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(build_digest(), parse_mode="Markdown")
+    await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
 
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 
 import llm
+from backlog_tools import list_backlog
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
 
@@ -29,7 +30,8 @@ def _system_prompt() -> str:
     now = datetime.now().strftime("%A, %d de %B de %Y, %H:%M")
     base = (
         f"Eres un asistente personal. Hoy es {now}. "
-        "Tienes acceso al Google Calendar del usuario y a su lista de tareas. "
+        "Tienes acceso al Google Calendar del usuario, su lista de tareas y su backlog. "
+        "Las tareas son acciones inmediatas; el backlog son ideas o proyectos a largo plazo. "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
         "Responde siempre en español. "
         "Usa markdown minimalista: negritas y listas cuando ayuden, sin emojis, sin encabezados grandes. "
@@ -42,6 +44,15 @@ def _system_prompt() -> str:
             for t in tasks:
                 due = f" (vence {t['due']})" if t.get("due") else ""
                 lines.append(f"  - [doc_id={t['doc_id']}] {t['title']}{due}")
+            base += "\n\n" + "\n".join(lines)
+    except Exception:
+        pass
+    try:
+        items = list_backlog()
+        if items:
+            lines = ["Backlog actual:"]
+            for item in items:
+                lines.append(f"  - [doc_id={item['doc_id']}] {item['title']}")
             base += "\n\n" + "\n".join(lines)
     except Exception:
         pass

@@ -1,10 +1,16 @@
 import json
 
+from backlog_tools import (
+    create_backlog_item,
+    delete_backlog_item,
+    list_backlog,
+    update_backlog_item,
+)
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
 
 # Tools that require explicit user confirmation before execution
-REQUIRE_CONFIRMATION = {"delete_event", "delete_task"}
+REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item"}
 
 # ── Tool schemas (OpenAI/DeepSeek function-calling format) ────────────────────
 
@@ -138,19 +144,76 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_backlog_item",
+            "description": "Add a long-term idea or project to the backlog.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title":       {"type": "string"},
+                    "description": {"type": "string", "description": "Optional details or motivation"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_backlog",
+            "description": "List all items in the backlog.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_backlog_item",
+            "description": "Edit a backlog item's title or description by its doc_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_id":      {"type": "integer"},
+                    "title":       {"type": "string"},
+                    "description": {"type": "string"},
+                },
+                "required": ["doc_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_backlog_item",
+            "description": "Permanently delete a backlog item by its doc_id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "doc_id": {"type": "integer"},
+                },
+                "required": ["doc_id"],
+            },
+        },
+    },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _SYNC_DISPATCH: dict = {
-    "create_event": create_event,
-    "list_events":  list_events,
-    "update_event": lambda **kw: update_event(kw.pop("event_id"), **kw),
-    "delete_event": delete_event,
-    "create_task":  create_task,
-    "list_tasks":   list_tasks,
-    "update_task":  lambda **kw: update_task(kw.pop("doc_id"), **kw),
-    "delete_task":  delete_task,
+    "create_event":        create_event,
+    "list_events":         list_events,
+    "update_event":        lambda **kw: update_event(kw.pop("event_id"), **kw),
+    "delete_event":        delete_event,
+    "create_task":         create_task,
+    "list_tasks":          list_tasks,
+    "update_task":         lambda **kw: update_task(kw.pop("doc_id"), **kw),
+    "delete_task":         delete_task,
+    "create_backlog_item": create_backlog_item,
+    "list_backlog":        list_backlog,
+    "update_backlog_item": lambda **kw: update_backlog_item(kw.pop("doc_id"), **kw),
+    "delete_backlog_item": delete_backlog_item,
 }
 
 
