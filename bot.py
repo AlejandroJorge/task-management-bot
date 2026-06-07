@@ -62,6 +62,8 @@ def main() -> None:
     jq.run_daily(digest_job, time=time(evening_hour, 0), data=chat_id, name="evening_digest")
 
     async def on_startup(app):
+        if auth.load_saved_token():
+            logger.info("Refresh token restored from DB.")
         await app.bot.send_message(chat_id=chat_id, text="He sido reiniciado.")
 
     app.post_init = on_startup

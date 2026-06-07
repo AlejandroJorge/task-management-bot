@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
@@ -14,7 +15,7 @@ CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
 def _service():
     token = auth.get_refresh_token()
     if not token:
-        raise RuntimeError("Google Calendar is not authenticated. Send /login to set it up.")
+        raise RuntimeError("Google Calendar no autenticado. Usa /login para conectarlo.")
     creds = Credentials(
         token=None,
         refresh_token=token,
@@ -23,7 +24,14 @@ def _service():
         token_uri="https://oauth2.googleapis.com/token",
         scopes=SCOPES,
     )
-    creds.refresh(Request())
+    try:
+        creds.refresh(Request())
+    except RefreshError:
+        auth.clear_token()
+        raise RuntimeError(
+            "Las credenciales de Google expiraron o fueron revocadas. "
+            "Usa /login para autenticarte de nuevo."
+        )
     return build("calendar", "v3", credentials=creds)
 
 
