@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.ext.filters import User
 
-from handlers import clear, handle_message, help_command, start
+from handlers import authcode, clear, handle_message, help_command, login, start
 from jobs import daily_summary, task_reminder
 
 load_dotenv()
@@ -32,6 +32,8 @@ def main() -> None:
     app.add_handler(CommandHandler("start", start, filters=me))
     app.add_handler(CommandHandler("help", help_command, filters=me))
     app.add_handler(CommandHandler("clear", clear, filters=me))
+    app.add_handler(CommandHandler("login", login, filters=me))
+    app.add_handler(CommandHandler("authcode", authcode, filters=me))
 
     # ── message handlers (owner only) ─────────────────────────────────────────
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & me, handle_message))

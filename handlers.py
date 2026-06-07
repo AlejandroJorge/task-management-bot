@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 import agent
+import auth
 from agent import ConfirmationRequest
 
 logger = logging.getLogger(__name__)
@@ -26,11 +27,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "/start — greet\n"
-        "/help  — this message\n"
-        "/clear — reset conversation history\n\n"
+        "/start    — greet\n"
+        "/help     — this message\n"
+        "/clear    — reset conversation history\n"
+        "/login    — re-authenticate Google Calendar\n"
+        "/authcode — finish login (paste URL from browser)\n\n"
         "Just write naturally — I'll figure out what to do."
     )
+
+
+async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        url = auth.generate_auth_url()
+    except KeyError as e:
+        await update.message.reply_text(f"Missing env var: {e}. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.")
+        return
+    await update.message.reply_text(
+        f"1. Open this link and approve access:\n{url}\n\n"
+        "2. Your browser will show a connection error — that's expected.\n"
+        "3. Copy the full URL from the address bar and send it here as:\n"
+        "/authcode <url>"
+    )
+
+
+async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    raw = " ".join(context.args or []).strip()
+    if not raw:
+        await update.message.reply_text("Usage: /authcode <url from browser address bar>")
+        return
+    try:
+        auth.exchange_code(raw)
+        await update.message.reply_text("✅ Authenticated! Google Calendar is ready.")
+    except RuntimeError as e:
+        await update.message.reply_text(str(e))
+    except Exception as e:
+        logger.exception("Auth exchange failed")
+        await update.message.reply_text(f"Auth failed: {e}")
 
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
