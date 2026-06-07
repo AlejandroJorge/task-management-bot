@@ -1,4 +1,5 @@
 import logging
+import os
 from collections import defaultdict
 
 from telegram import Update
@@ -57,7 +58,13 @@ async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     try:
         auth.exchange_code(raw)
-        await update.message.reply_text("✅ Authenticated! Google Calendar is ready.")
+        token = os.environ["GOOGLE_REFRESH_TOKEN"]
+        await update.message.reply_text(
+            "✅ Authenticated! Google Calendar is ready.\n\n"
+            "Save this refresh token as GOOGLE_REFRESH_TOKEN in your deployment "
+            "so the bot survives restarts:\n"
+            f"`{token}`"
+        )
     except RuntimeError as e:
         await update.message.reply_text(str(e))
     except Exception as e:

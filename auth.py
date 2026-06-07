@@ -1,6 +1,5 @@
 import os
 import urllib.parse
-from pathlib import Path
 
 from google_auth_oauthlib.flow import Flow
 
@@ -37,48 +36,20 @@ def exchange_code(raw: str) -> None:
     copies from their browser after approving access. Parses all query
     params robustly so extra params don't cause issues.
 
-    Updates GOOGLE_REFRESH_TOKEN in os.environ and rewrites .env in place.
+    Updates GOOGLE_REFRESH_TOKEN in os.environ only — no file I/O.
+    To persist across container restarts, inject the token as an env var.
     """
     global _flow
     if _flow is None:
         raise RuntimeError("No login in progress — send /login first.")
 
-    # Robustly extract code= regardless of what else is in the query string
     parsed = urllib.parse.urlparse(raw.strip())
     params = urllib.parse.parse_qs(parsed.query)
 
-    if "code" in params:
-        code = params["code"][0]
-    else:
-        # User pasted just the bare code value
-        code = raw.strip()
+    code = params["code"][0] if "code" in params else raw.strip()
 
     _flow.fetch_token(code=code)
     refresh_token = _flow.credentials.refresh_token
     _flow = None
 
     os.environ["GOOGLE_REFRESH_TOKEN"] = refresh_token
-    _write_env("GOOGLE_REFRESH_TOKEN", refresh_token)
-
-
-def _write_env(key: str, value: str) -> None:
-    """Update or append a key=value line in .env without touching other lines."""
-    env_path = Path(".env")
-    if not env_path.exists():
-        env_path.write_text(f"{key}={value}\n")
-        return
-
-    lines = env_path.read_text().splitlines()
-    found = False
-    new_lines = []
-    for line in lines:
-        if line.startswith(f"{key}="):
-            new_lines.append(f"{key}={value}")
-            found = True
-        else:
-            new_lines.append(line)
-
-    if not found:
-        new_lines.append(f"{key}={value}")
-
-    env_path.write_text("\n".join(new_lines) + "\n")

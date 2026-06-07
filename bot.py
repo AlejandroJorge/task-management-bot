@@ -2,15 +2,12 @@ import logging
 import os
 from datetime import time
 
-from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.ext.filters import User
 
 from handlers import authcode, clear, handle_message, help_command, login, start
 from jobs import daily_summary, task_reminder
-
-load_dotenv()
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

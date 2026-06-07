@@ -10,9 +10,12 @@ CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
 
 
 def _service():
+    token = os.environ.get("GOOGLE_REFRESH_TOKEN")
+    if not token:
+        raise RuntimeError("Google Calendar is not authenticated. Send /login to set it up.")
     creds = Credentials(
         token=None,
-        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
+        refresh_token=token,
         client_id=os.environ["GOOGLE_CLIENT_ID"],
         client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
         token_uri="https://oauth2.googleapis.com/token",
