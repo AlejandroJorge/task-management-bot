@@ -20,10 +20,12 @@ def italic(text: str) -> str:
 
 # Spanish date helpers — avoids locale dependency
 _DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+_DIAS_CORTOS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 _MESES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
+_MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 
 def fecha_es(dt) -> str:

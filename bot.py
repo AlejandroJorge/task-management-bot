@@ -8,7 +8,7 @@ from telegram.ext.filters import User
 
 import auth
 from handlers import authcode, backlog, clear, handle_message, help_command, login, ls, start
-from jobs import auth_check, digest_job, task_reminder
+from jobs import auth_check, digest_job, event_notifier, task_reminder
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -43,6 +43,9 @@ def main() -> None:
 
     # Auth watchdog: poll every 10 min, remind every 20 min if unauthenticated
     jq.run_repeating(auth_check, interval=600, first=15, data=chat_id, name="auth_check")
+
+    # Event notifier: checks every minute, fires at 120/90/60/50/40/30/20/10/5 min before
+    jq.run_repeating(event_notifier, interval=60, first=10, data=chat_id, name="event_notifier")
 
     # Task reminder on a fixed interval
     interval_hours = float(os.getenv("REMINDER_INTERVAL_HOURS", "6"))
