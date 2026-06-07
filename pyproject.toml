@@ -8,4 +8,5 @@ dependencies = [
     "google-auth>=2.53.0",
     "python-dotenv>=1.2.2",
     "python-telegram-bot[job-queue]>=22.7",
+    "tinydb>=4.8.2",
 ]
