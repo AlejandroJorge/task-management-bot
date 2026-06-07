@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timezone
 
 import auth
 from calendar_tools import list_events
-from formatting import bold, esc, fecha_es, italic
+from formatting import bold, esc, fecha_es, fmt_due, italic
 from tasks_tools import list_tasks
 
 
@@ -39,7 +39,7 @@ def build_digest() -> str:
     if tasks:
         lines.append(bold(f"Tareas pendientes ({len(tasks)}):"))
         for t in tasks:
-            due = f"  — vence {esc(t['due'])}" if t.get("due") else ""
+            due = f"  — vence {esc(fmt_due(t['due']))}" if t.get("due") else ""
             lines.append(f"• {esc(t['title'])}{due}")
             if t.get("notes"):
                 lines.append(f"  {italic(t['notes'])}")

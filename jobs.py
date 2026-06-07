@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 
 import auth
 from digest import build_digest
-from formatting import bold, esc, italic
+from formatting import bold, esc, fmt_due, italic
 from tasks_tools import list_tasks
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ async def task_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
         hora = esc(datetime.now().strftime("%H:%M"))
         lines = [f"{bold('Tareas pendientes')} — {hora}", ""]
         for t in tasks:
-            due = f"  — vence {esc(t['due'])}" if t.get("due") else ""
+            due = f"  — vence {esc(fmt_due(t['due']))}" if t.get("due") else ""
             lines.append(f"• {esc(t['title'])}{due}")
             if t.get("notes"):
                 lines.append(f"  {italic(t['notes'])}")

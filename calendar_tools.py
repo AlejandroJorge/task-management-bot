@@ -35,6 +35,11 @@ def _service():
     return build("calendar", "v3", credentials=creds)
 
 
+def get_event(event_id: str) -> dict:
+    """Fetch a single event by ID."""
+    return _service().events().get(calendarId=CALENDAR_ID, eventId=event_id).execute()
+
+
 def create_event(
     summary: str,
     start: str,

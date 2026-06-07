@@ -6,6 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.ext.filters import User
 
+import auth
 from handlers import authcode, backlog, clear, handle_message, help_command, login, ls, start
 from jobs import auth_check, digest_job, task_reminder
 

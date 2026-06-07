@@ -1,3 +1,4 @@
+import json
 import logging
 from collections import defaultdict
 
@@ -10,8 +11,40 @@ from agent import ConfirmationRequest
 from backlog_tools import list_backlog
 from digest import build_digest
 from formatting import bold, esc, italic
+from calendar_tools import get_event
+from tasks_tools import list_tasks
+from tools_registry import REQUIRE_CONFIRMATION
 
 logger = logging.getLogger(__name__)
+
+
+async def _reply(message, text: str, parse_mode: str = "Markdown") -> None:
+    """Send a reply, falling back to plain text if Markdown parsing fails."""
+    try:
+        await message.reply_text(text, parse_mode=parse_mode)
+    except Exception:
+        await message.reply_text(text)
+
+
+def _describe_call(name: str, args: dict) -> str:
+    """Return a human-readable label for a destructive tool call."""
+    if name == "delete_task":
+        doc_id = args.get("doc_id")
+        task = next((t for t in list_tasks(show_done=True) if t["doc_id"] == doc_id), None)
+        return task["title"] if task else f"tarea #{doc_id}"
+    if name == "delete_backlog_item":
+        doc_id = args.get("doc_id")
+        item = next((i for i in list_backlog() if i["doc_id"] == doc_id), None)
+        return item["title"] if item else f"backlog #{doc_id}"
+    if name == "delete_event":
+        event_id = args.get("event_id", "")
+        try:
+            event = get_event(event_id)
+            return event.get("summary") or event_id
+        except Exception:
+            return event_id
+    return name
+
 
 _histories: dict[int, list[dict]] = defaultdict(list)
 _pending: dict[int, ConfirmationRequest] = {}
@@ -118,7 +151,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         request = _pending.pop(chat_id)
         reply = await agent.resume_after_confirmation(confirmed, request, _histories[chat_id])
-        await update.message.reply_text(reply, parse_mode="Markdown")
+        await _reply(update.message, reply)
         return
 
     try:
@@ -130,10 +163,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if isinstance(result, ConfirmationRequest):
         _pending[chat_id] = result
-        args_str = ", ".join(f"{k}={v}" for k, v in result.tool_args.items())
-        await update.message.reply_text(
-            f"Confirmas ejecutar `{result.tool_name}` con:\n{args_str}\n\nResponde *si* o *no*.",
-            parse_mode="Markdown",
-        )
+        destructive = [c for c in result.pending_calls if c["name"] in REQUIRE_CONFIRMATION]
+        lines = [bold("Confirmar eliminación:"), ""]
+        for call in destructive:
+            args = json.loads(call["args_json"])
+            lines.append(f"• {esc(_describe_call(call['name'], args))}")
+        lines += ["", esc("Responde si o no.")]
+        await _reply(update.message, "\n".join(lines), parse_mode="MarkdownV2")
     else:
-        await update.message.reply_text(result, parse_mode="Markdown")
+        await _reply(update.message, result)
