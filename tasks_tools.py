@@ -20,9 +20,8 @@ def create_task(title: str, notes: str = "", due: str | None = None) -> int:
 def list_tasks(show_done: bool = False) -> list[dict]:
     """Return all tasks, optionally including completed ones."""
     with _db() as db:
-        if show_done:
-            return db.all()
-        return db.search(Task.done == False)  # noqa: E712
+        docs = db.all() if show_done else db.search(Task.done == False)  # noqa: E712
+        return [{"doc_id": d.doc_id, **d} for d in docs]
 
 
 def update_task(doc_id: int, **fields) -> None:

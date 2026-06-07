@@ -21,12 +21,13 @@ from datetime import datetime
 from typing import Any
 
 import llm
+from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
 
 
 def _system_prompt() -> str:
     now = datetime.now().strftime("%A, %d de %B de %Y, %H:%M")
-    return (
+    base = (
         f"Eres un asistente personal. Hoy es {now}. "
         "Tienes acceso al Google Calendar del usuario y a su lista de tareas. "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
@@ -34,6 +35,17 @@ def _system_prompt() -> str:
         "Usa markdown minimalista: negritas y listas cuando ayuden, sin emojis, sin encabezados grandes. "
         "Respuestas cortas y directas."
     )
+    try:
+        tasks = list_tasks(show_done=False)
+        if tasks:
+            lines = ["Tareas pendientes actuales:"]
+            for t in tasks:
+                due = f" (vence {t['due']})" if t.get("due") else ""
+                lines.append(f"  - [doc_id={t['doc_id']}] {t['title']}{due}")
+            base += "\n\n" + "\n".join(lines)
+    except Exception:
+        pass
+    return base
 
 
 @dataclasses.dataclass

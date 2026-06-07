@@ -44,7 +44,7 @@ async def task_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = [f"*Tareas pendientes* — {datetime.now().strftime('%H:%M')}\n"]
         for t in tasks:
             due = f"  — vence {t['due']}" if t.get("due") else ""
-            lines.append(f"- [{t.doc_id}] {t['title']}{due}")
+            lines.append(f"- [{t['doc_id']}] {t['title']}{due}")
             if t.get("notes"):
                 lines.append(f"  _{t['notes']}_")
         text = "\n".join(lines)
