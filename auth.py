@@ -8,6 +8,11 @@ _REDIRECT_PORT = int(os.getenv("OAUTH_REDIRECT_PORT", "8765"))
 _REDIRECT_URI = f"http://localhost:{_REDIRECT_PORT}/callback"
 
 _flow: Flow | None = None
+_refresh_token: str | None = None
+
+
+def get_refresh_token() -> str | None:
+    return _refresh_token
 
 
 def generate_auth_url() -> str:
@@ -32,24 +37,17 @@ def generate_auth_url() -> str:
 
 def exchange_code(raw: str) -> None:
     """
-    Accept the full redirect URL (or just the bare code) that the user
-    copies from their browser after approving access. Parses all query
-    params robustly so extra params don't cause issues.
-
-    Updates GOOGLE_REFRESH_TOKEN in os.environ only — no file I/O.
-    To persist across container restarts, inject the token as an env var.
+    Accept the full redirect URL (or bare code) copied from the browser.
+    Stores the refresh token in memory only — lost on container restart.
     """
-    global _flow
+    global _flow, _refresh_token
     if _flow is None:
         raise RuntimeError("No login in progress — send /login first.")
 
     parsed = urllib.parse.urlparse(raw.strip())
     params = urllib.parse.parse_qs(parsed.query)
-
     code = params["code"][0] if "code" in params else raw.strip()
 
     _flow.fetch_token(code=code)
-    refresh_token = _flow.credentials.refresh_token
+    _refresh_token = _flow.credentials.refresh_token
     _flow = None
-
-    os.environ["GOOGLE_REFRESH_TOKEN"] = refresh_token

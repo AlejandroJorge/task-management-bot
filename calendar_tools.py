@@ -5,12 +5,14 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+import auth
+
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
 
 
 def _service():
-    token = os.environ.get("GOOGLE_REFRESH_TOKEN")
+    token = auth.get_refresh_token()
     if not token:
         raise RuntimeError("Google Calendar is not authenticated. Send /login to set it up.")
     creds = Credentials(
