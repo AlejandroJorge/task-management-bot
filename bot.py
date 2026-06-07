@@ -8,7 +8,7 @@ from telegram.ext.filters import User
 
 import auth
 from handlers import authcode, backlog, clear, handle_message, help_command, login, ls, start
-from jobs import auth_check, digest_job, event_notifier, task_reminder
+from jobs import auth_check, digest_job, event_notifier
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -46,16 +46,6 @@ def main() -> None:
 
     # Event notifier: checks every minute, fires at 120/90/60/50/40/30/20/10/5 min before
     jq.run_repeating(event_notifier, interval=60, first=10, data=chat_id, name="event_notifier")
-
-    # Task reminder on a fixed interval
-    interval_hours = float(os.getenv("REMINDER_INTERVAL_HOURS", "6"))
-    jq.run_repeating(
-        task_reminder,
-        interval=interval_hours * 3600,
-        first=20,
-        data=chat_id,
-        name="task_reminder",
-    )
 
     # Morning digest
     morning_hour = int(os.getenv("MORNING_DIGEST_HOUR", "6"))

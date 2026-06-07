@@ -7,7 +7,7 @@ import auth
 from calendar_tools import list_events
 from digest import build_digest
 from formatting import bold, esc, fmt_due, italic
-from tasks_tools import list_tasks
+from tasks_tools import list_tasks as _list_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -42,24 +42,6 @@ async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def task_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends pending tasks to the owner on a repeating interval."""
-    tasks = list_tasks(show_done=False)
-    if not tasks:
-        text = esc("Sin tareas pendientes.")
-    else:
-        hora = esc(datetime.now().strftime("%H:%M"))
-        lines = [f"{bold('Tareas pendientes')} — {hora}", ""]
-        for t in tasks:
-            due = f"  — vence {esc(fmt_due(t['due']))}" if t.get("due") else ""
-            lines.append(f"• {esc(t['title'])}{due}")
-            if t.get("notes"):
-                lines.append(f"  {italic(t['notes'])}")
-        text = "\n".join(lines)
-    await context.bot.send_message(
-        chat_id=context.job.data, text=text, parse_mode="MarkdownV2"
-    )
-
 
 async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Runs every minute. Sends reminders at defined intervals before events."""
@@ -81,44 +63,55 @@ async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:
         return
 
-    for event in events:
-        event_id = event.get("id", "")
-        start_raw = event.get("start", {}).get("dateTime")
-        if not start_raw:
-            continue  # all-day event
-
-        start_dt = datetime.fromisoformat(start_raw)
-        if start_dt.tzinfo is None:
-            start_dt = start_dt.replace(tzinfo=timezone.utc)
-
-        _starts[event_id] = start_dt
-        if event_id not in _notified:
-            _notified[event_id] = set()
-
-        minutes_until = (start_dt - now).total_seconds() / 60
-
+    async def _maybe_notify(key: str, title: str, due_dt: datetime, suffix: str = "") -> None:
+        _starts[key] = due_dt
+        if key not in _notified:
+            _notified[key] = set()
+        minutes_until = (due_dt - now).total_seconds() / 60
         for interval in _NOTIFY_BEFORE:
-            if interval in _notified[event_id]:
+            if interval in _notified[key]:
                 continue
             if abs(minutes_until - interval) <= 0.6:  # ±36 s tolerance
-                summary = event.get("summary", "(sin título)")
                 if interval >= 60:
                     h, m = divmod(interval, 60)
                     label = f"{h}h {m}min" if m else f"{h}h"
                 else:
                     label = f"{interval} min"
+                text = f"*{title}*{suffix} en {label}"
                 try:
                     await context.bot.send_message(
-                        chat_id=context.job.data,
-                        text=f"*{summary}* en {label}",
-                        parse_mode="Markdown",
+                        chat_id=context.job.data, text=text, parse_mode="Markdown"
                     )
                 except Exception:
                     await context.bot.send_message(
-                        chat_id=context.job.data,
-                        text=f"{summary} en {label}",
+                        chat_id=context.job.data, text=f"{title}{suffix} en {label}"
                     )
-                _notified[event_id].add(interval)
+                _notified[key].add(interval)
+
+    # ── Eventos ───────────────────────────────────────────────────────────────
+    for event in events:
+        event_id = event.get("id", "")
+        start_raw = event.get("start", {}).get("dateTime")
+        if not start_raw:
+            continue  # all-day event
+        start_dt = datetime.fromisoformat(start_raw)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        await _maybe_notify(f"evt_{event_id}", event.get("summary", "(sin título)"), start_dt)
+
+    # ── Tareas con hora de vencimiento ────────────────────────────────────────
+    try:
+        tasks = _list_tasks(show_done=False)
+    except Exception:
+        tasks = []
+    for task in tasks:
+        due_str = task.get("due", "")
+        if not due_str or "T" not in due_str:
+            continue  # date-only or no due — no time to count down to
+        due_dt = datetime.fromisoformat(due_str.replace("Z", "+00:00"))
+        if due_dt.tzinfo is None:
+            due_dt = due_dt.replace(tzinfo=timezone.utc)
+        await _maybe_notify(f"task_{task['doc_id']}", task["title"], due_dt, " (tarea)")
 
 
 async def daily_summary(context: ContextTypes.DEFAULT_TYPE) -> None:
