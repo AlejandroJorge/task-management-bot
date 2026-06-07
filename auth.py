@@ -3,6 +3,9 @@ import urllib.parse
 
 from google_auth_oauthlib.flow import Flow
 
+# oauthlib requires HTTPS by default; localhost redirects are always safe
+os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")
+
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 _REDIRECT_PORT = int(os.getenv("OAUTH_REDIRECT_PORT", "8765"))
 _REDIRECT_URI = f"http://localhost:{_REDIRECT_PORT}/callback"
