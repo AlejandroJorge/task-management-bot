@@ -1,9 +1,8 @@
-import base64
-import json
 import os
 from datetime import datetime, timezone
 
-from google.oauth2 import service_account
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
@@ -11,13 +10,15 @@ CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
 
 
 def _service():
-    raw = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
-    try:
-        info = json.loads(raw)
-    except json.JSONDecodeError:
-        # Accept base64-encoded JSON as well
-        info = json.loads(base64.b64decode(raw))
-    creds = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
+    creds = Credentials(
+        token=None,
+        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"],
+        client_id=os.environ["GOOGLE_CLIENT_ID"],
+        client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=SCOPES,
+    )
+    creds.refresh(Request())
     return build("calendar", "v3", credentials=creds)
 
 
@@ -49,7 +50,7 @@ def list_events(max_results: int = 10, time_min: str | None = None) -> list[dict
     time_min defaults to now (UTC). Returns a list of event dicts.
     """
     if time_min is None:
-        time_min = datetime.now(tz=__import__("datetime").timezone.utc).isoformat()
+        time_min = datetime.now(tz=timezone.utc).isoformat()
     result = (
         _service()
         .events()

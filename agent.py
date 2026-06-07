@@ -17,14 +17,21 @@ across Telegram messages.
 
 import dataclasses
 import json
+from datetime import datetime
 from typing import Any
 
 import llm
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
 
-SYSTEM_PROMPT = """You are a personal assistant. You have access to the user's
-Google Calendar and a personal task list. Interpret natural language requests
-and call the appropriate tools. Be concise in your final responses."""
+
+def _system_prompt() -> str:
+    now = datetime.now().strftime("%A, %B %d %Y, %H:%M")
+    return (
+        f"You are a personal assistant. Today is {now}. "
+        "You have access to the user's Google Calendar and a personal task list. "
+        "Interpret natural language requests and call the appropriate tools. "
+        "Be concise in your final responses."
+    )
 
 
 @dataclasses.dataclass
@@ -47,7 +54,10 @@ async def process(
     Returns either a final text reply or a ConfirmationRequest.
     """
     if not history or history[0].get("role") != "system":
-        history.insert(0, {"role": "system", "content": SYSTEM_PROMPT})
+        history.insert(0, {"role": "system", "content": _system_prompt()})
+    else:
+        # Refresh timestamp on every call so the model always knows the current time
+        history[0]["content"] = _system_prompt()
 
     history.append({"role": "user", "content": user_message})
 
