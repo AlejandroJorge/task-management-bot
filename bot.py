@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from telegram.ext.filters import User
 
-from handlers import authcode, clear, handle_message, help_command, login, ls, start
+from handlers import authcode, backlog, clear, handle_message, help_command, login, ls, start
 from jobs import auth_check, digest_job, task_reminder
 
 logging.basicConfig(
@@ -32,6 +32,7 @@ def main() -> None:
     app.add_handler(CommandHandler("login",    login,        filters=me))
     app.add_handler(CommandHandler("authcode", authcode,     filters=me))
     app.add_handler(CommandHandler("ls",       ls,           filters=me))
+    app.add_handler(CommandHandler("backlog",  backlog,      filters=me))
 
     # ── message handlers (owner only) ─────────────────────────────────────────
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & me, handle_message))

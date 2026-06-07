@@ -7,7 +7,9 @@ from telegram.ext import ContextTypes
 import agent
 import auth
 from agent import ConfirmationRequest
+from backlog_tools import list_backlog
 from digest import build_digest
+from formatting import bold, esc, italic
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         "*Comandos disponibles*\n\n"
         "/ls — resumen del dia: eventos y tareas\n"
+        "/backlog — ver ideas a largo plazo\n"
         "/clear — borrar historial de conversacion\n"
         "/login — autenticar Google Calendar\n"
         "/authcode — completar login (pegar URL del navegador)\n"
@@ -73,6 +76,19 @@ async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
+
+
+async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    items = list_backlog()
+    if not items:
+        await update.message.reply_text("No hay ideas en el backlog.")
+        return
+    lines = [bold(f"Backlog ({len(items)}):"), ""]
+    for item in items:
+        lines.append(f"• {bold(item['title'])}")
+        if item.get("description"):
+            lines.append(f"  {italic(item['description'])}")
+    await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

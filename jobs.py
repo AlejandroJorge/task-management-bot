@@ -46,7 +46,7 @@ async def task_reminder(context: ContextTypes.DEFAULT_TYPE) -> None:
         lines = [f"{bold('Tareas pendientes')} — {hora}", ""]
         for t in tasks:
             due = f"  — vence {esc(t['due'])}" if t.get("due") else ""
-            lines.append(f"• \\[{t['doc_id']}\\] {esc(t['title'])}{due}")
+            lines.append(f"• {esc(t['title'])}{due}")
             if t.get("notes"):
                 lines.append(f"  {italic(t['notes'])}")
         text = "\n".join(lines)
