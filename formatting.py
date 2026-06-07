@@ -1,5 +1,7 @@
 """MarkdownV2 helpers for bot-generated messages."""
 
+SEP = "──────────────"  # Unicode line, safe in MarkdownV2 (no escaping needed)
+
 
 def esc(text: str) -> str:
     """Escape all MarkdownV2 special characters in plain text."""

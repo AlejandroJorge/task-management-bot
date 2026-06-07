@@ -40,7 +40,8 @@ def _system_prompt() -> str:
         "Responde siempre en español. "
         "Usa Markdown de Telegram (v1): *negrita* con un solo asterisco, _cursiva_ con guion bajo. "
         "NUNCA uses ** para negrita ni __ para subrayado — Telegram no los soporta. "
-        "Sin emojis, sin encabezados grandes. Respuestas cortas y directas. "
+        "Puedes usar emojis ligeros como titular de sección (ej. ✅ para tareas, 📅 para eventos). "
+        "Respuestas cortas y directas. "
         "NUNCA menciones doc_id, event_id ni ningún identificador interno al usuario. "
         "Refierete a tareas y eventos solo por su nombre."
     )

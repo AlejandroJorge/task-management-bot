@@ -10,7 +10,7 @@ import auth
 from agent import ConfirmationRequest
 from backlog_tools import list_backlog
 from digest import build_digest
-from formatting import bold, esc, italic
+from formatting import SEP, bold, esc, italic
 from calendar_tools import get_event
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION
@@ -116,7 +116,7 @@ async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not items:
         await update.message.reply_text("No hay ideas en el backlog.")
         return
-    lines = [bold(f"Backlog ({len(items)}):"), ""]
+    lines = [f"💡 {bold(f'Backlog ({len(items)})')}", SEP, ""]
     for item in items:
         lines.append(f"• {bold(item['title'])}")
         if item.get("description"):
@@ -164,7 +164,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if isinstance(result, ConfirmationRequest):
         _pending[chat_id] = result
         destructive = [c for c in result.pending_calls if c["name"] in REQUIRE_CONFIRMATION]
-        lines = [bold("Confirmar eliminación:"), ""]
+        lines = [f"🗑 {bold('Confirmar eliminación')}", SEP, ""]
         for call in destructive:
             args = json.loads(call["args_json"])
             lines.append(f"• {esc(_describe_call(call['name'], args))}")

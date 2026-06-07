@@ -29,7 +29,7 @@ async def auth_check(context: ContextTypes.DEFAULT_TYPE) -> None:
     if _last_auth_reminder is None or now - _last_auth_reminder >= timedelta(minutes=20):
         await context.bot.send_message(
             chat_id=context.job.data,
-            text="Google Calendar no esta autenticado. Usa /login para conectarlo.",
+            text="🔑 Google Calendar no está autenticado. Usa /login para conectarlo.",
         )
         _last_auth_reminder = now
 
@@ -77,7 +77,8 @@ async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:
                     label = f"{h}h {m}min" if m else f"{h}h"
                 else:
                     label = f"{interval} min"
-                text = f"*{title}*{suffix} en {label}"
+                emoji = "⏰" if suffix else "🔔"
+                text = f"{emoji} *{title}*{suffix} — en {label}"
                 try:
                     await context.bot.send_message(
                         chat_id=context.job.data, text=text, parse_mode="Markdown"
