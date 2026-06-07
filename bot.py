@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:
     token = os.environ["BOT_TOKEN"]
-    chat_id = os.getenv("PROACTIVE_CHAT_ID")
-
     allowed_user_id = int(os.environ["ALLOWED_USER_ID"])
+    chat_id = str(allowed_user_id)
+
     me = User(user_id=allowed_user_id)
 
     app = Application.builder().token(token).build()
@@ -36,27 +36,24 @@ def main() -> None:
     # ── message handlers (owner only) ─────────────────────────────────────────
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & me, handle_message))
 
-    # ── proactive jobs (only if a default chat is configured) ─────────────────
-    if chat_id:
-        interval_hours = float(os.getenv("REMINDER_INTERVAL_HOURS", "6"))
-        jq = app.job_queue
+    # ── proactive jobs ────────────────────────────────────────────────────────
+    interval_hours = float(os.getenv("REMINDER_INTERVAL_HOURS", "6"))
+    jq = app.job_queue
 
-        # Periodic task-list reminder
-        jq.run_repeating(
-            task_reminder,
-            interval=interval_hours * 3600,
-            first=10,
-            data=chat_id,
-            name="task_reminder",
-        )
+    jq.run_repeating(
+        task_reminder,
+        interval=interval_hours * 3600,
+        first=10,
+        data=chat_id,
+        name="task_reminder",
+    )
 
-        # Daily greeting at 08:00 local time
-        jq.run_daily(
-            daily_summary,
-            time=time(8, 0),
-            data=chat_id,
-            name="daily_summary",
-        )
+    jq.run_daily(
+        daily_summary,
+        time=time(8, 0),
+        data=chat_id,
+        name="daily_summary",
+    )
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
