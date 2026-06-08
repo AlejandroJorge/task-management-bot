@@ -15,6 +15,7 @@ from formatting import (
 )
 from tasks_tools import list_tasks
 from tracking_tools import list_timeblocks
+from tracking_state import get_state as _get_tracking_state
 
 
 def _fmt_event_time(start_raw: str, end_raw: str = "") -> str:
@@ -72,25 +73,40 @@ def build_digest() -> str:
 
     # ── Tracking de hoy ───────────────────────────────────────────────────────
     try:
+        live = _get_tracking_state()
+        is_active = live.get("status") == "ACTIVO"
+        live_event_id = live.get("event_id") if is_active else None
+        elapsed_mins = live.get("elapsed_minutes", 0) if is_active else 0
+
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         blocks = list_timeblocks(day_start.isoformat(), now.isoformat())
+        completed = [b for b in blocks if b["event_id"] != live_event_id]
+
         lines.append(f"⏱ {bold('Tracking hoy')}")
         lines.append(SEP)
-        if blocks:
-            total_mins = 0
-            for b in blocks:
-                dt_s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
-                dt_e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
-                mins = int((dt_e - dt_s).total_seconds() / 60)
-                total_mins += mins
-                h, m = divmod(mins, 60)
-                dur = f"{h}h{m:02d}m" if h else f"{m}m"
-                lines.append(f"• {esc(dt_s.strftime('%H:%M'))}–{esc(dt_e.strftime('%H:%M'))}  {esc(b['activity'])}  _{esc(dur)}_")
+
+        if is_active:
+            started = datetime.fromisoformat(live["started_at"]).astimezone(_tz.LIMA)
+            h, m = divmod(elapsed_mins, 60)
+            dur = f"{h}h{m:02d}m" if h else f"{m}m"
+            lines.append(f"🔴 {bold('En curso:')} {esc(live['activity'])}  desde {esc(started.strftime('%H:%M'))} _{esc(dur)}_")
+
+        total_mins = elapsed_mins
+        for b in completed:
+            dt_s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
+            dt_e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
+            mins = int((dt_e - dt_s).total_seconds() / 60)
+            total_mins += mins
+            h, m = divmod(mins, 60)
+            dur = f"{h}h{m:02d}m" if h else f"{m}m"
+            lines.append(f"• {esc(dt_s.strftime('%H:%M'))}–{esc(dt_e.strftime('%H:%M'))}  {esc(b['activity'])}  _{esc(dur)}_")
+
+        if not is_active and not completed:
+            lines.append(italic("Sin bloques registrados hoy"))
+        elif total_mins > 0:
             th, tm = divmod(total_mins, 60)
             total_str = f"{th}h{tm:02d}m" if th else f"{tm}m"
             lines.append(f"  {italic(f'Total: {total_str}')}")
-        else:
-            lines.append(italic("Sin bloques registrados hoy"))
     except Exception as exc:
         lines.append(f"⏱ {bold('Tracking hoy')}")
         lines.append(SEP)

@@ -1,7 +1,8 @@
 import logging
 import os
 import sys
-from datetime import time
+from datetime import datetime, time
+import tz as _tz
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
@@ -67,7 +68,15 @@ def main() -> None:
         state = tracking_state.load_state()
         if state.get("status") == "ACTIVO":
             logger.info("Tracking session restored: %s", state.get("activity"))
-        await app.bot.send_message(chat_id=chat_id, text="He sido reiniciado.")
+            started = datetime.fromisoformat(state["started_at"]).astimezone(_tz.LIMA)
+            restart_msg = (
+                f"He sido reiniciado. "
+                f"Sesión en curso restaurada: {state['activity']} "
+                f"(desde las {started.strftime('%H:%M')})."
+            )
+        else:
+            restart_msg = "He sido reiniciado."
+        await app.bot.send_message(chat_id=chat_id, text=restart_msg)
 
     async def on_shutdown(app):
         await auth.stop_callback_server()
