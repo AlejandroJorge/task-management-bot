@@ -33,8 +33,10 @@ def _system_prompt() -> str:
     now = _tz.now().strftime("%A, %d de %B de %Y, %H:%M")
     base = (
         f"Eres un asistente personal. Hoy es {now}. "
-        "Tienes acceso al Google Calendar del usuario, su lista de tareas y su backlog. "
+        "Tienes acceso al Google Calendar del usuario (calendario 'Eventos'), su lista de tareas, su backlog "
+        "y un calendario de registro de tiempo ('Tracking'). "
         "Las tareas son acciones inmediatas; el backlog son ideas o proyectos a largo plazo. "
+        "El registro de tiempo permite anotar bloques de tiempo pasados sobre actividades (solo tiempos ya transcurridos, sin solapamientos). "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
         "REGLAS para el campo 'due' al crear o editar tareas: "
         "(1) Si el usuario NO menciona fecha ni plazo, NO incluyas 'due'. "

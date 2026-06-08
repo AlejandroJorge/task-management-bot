@@ -8,9 +8,10 @@ from backlog_tools import (
 )
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
+from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
 
 # Tools that require explicit user confirmation before execution
-REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item"}
+REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item", "delete_timeblock"}
 
 # ── Tool schemas (OpenAI/DeepSeek function-calling format) ────────────────────
 
@@ -197,6 +198,78 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_timeblock",
+            "description": (
+                "Register a past time interval spent on an activity in the Tracking calendar. "
+                "Both start and end must be before the current time. "
+                "Overlapping timeblocks are rejected. "
+                "Use ISO 8601 with UTC offset, e.g. 2026-06-07T16:34:00-05:00."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activity": {"type": "string", "description": "Name of the activity"},
+                    "start":    {"type": "string", "description": "Start datetime, ISO 8601 with offset"},
+                    "end":      {"type": "string", "description": "End datetime, ISO 8601 with offset"},
+                    "notes":    {"type": "string", "description": "Optional notes"},
+                },
+                "required": ["activity", "start", "end"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_timeblocks",
+            "description": "Query all timeblocks in the Tracking calendar between two datetimes.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "time_min": {"type": "string", "description": "Start of range, ISO 8601 with offset"},
+                    "time_max": {"type": "string", "description": "End of range, ISO 8601 with offset"},
+                },
+                "required": ["time_min", "time_max"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_timeblock",
+            "description": (
+                "Edit an existing timeblock. Any new start/end times must still be in the past. "
+                "Overlapping timeblocks are rejected."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string"},
+                    "activity": {"type": "string"},
+                    "start":    {"type": "string", "description": "ISO 8601 with offset"},
+                    "end":      {"type": "string", "description": "ISO 8601 with offset"},
+                    "notes":    {"type": "string"},
+                },
+                "required": ["event_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_timeblock",
+            "description": "Permanently delete a timeblock from the Tracking calendar.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string"},
+                },
+                "required": ["event_id"],
+            },
+        },
+    },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
@@ -214,6 +287,10 @@ _SYNC_DISPATCH: dict = {
     "list_backlog":        list_backlog,
     "update_backlog_item": lambda **kw: update_backlog_item(kw.pop("doc_id"), **kw),
     "delete_backlog_item": delete_backlog_item,
+    "create_timeblock":    create_timeblock,
+    "list_timeblocks":     list_timeblocks,
+    "update_timeblock":    lambda **kw: update_timeblock(kw.pop("event_id"), **kw),
+    "delete_timeblock":    delete_timeblock,
 }
 
 
