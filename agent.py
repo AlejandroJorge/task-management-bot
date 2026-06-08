@@ -47,6 +47,7 @@ def _system_prompt() -> str:
         "Usa el contexto del usuario para personalizar respuestas (horario, ubicación, etc.). "
         "Usa Markdown de Telegram (v1): *negrita* con un solo asterisco, _cursiva_ con guion bajo. "
         "NUNCA uses ** para negrita ni __ para subrayado — Telegram no los soporta. "
+        "NUNCA uses tablas — Telegram no las renderiza. Para listas de registros de tiempo u otros datos, usa lista cronológica con viñetas (•). "
         "Puedes usar emojis ligeros como titular de sección (ej. ✅ para tareas, 📅 para eventos). "
         "Respuestas cortas y directas. "
         "NUNCA menciones doc_id, event_id ni ningún identificador interno al usuario. "

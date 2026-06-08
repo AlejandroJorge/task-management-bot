@@ -14,6 +14,7 @@ from formatting import (
     italic,
 )
 from tasks_tools import list_tasks
+from tracking_tools import list_timeblocks
 
 
 def _fmt_event_time(start_raw: str, end_raw: str = "") -> str:
@@ -66,6 +67,34 @@ def build_digest() -> str:
             lines.append(f"📅 {bold('Próximos eventos')}")
             lines.append(SEP)
             lines.append(italic(f"Error: {exc}"))
+
+    lines.append("")
+
+    # ── Tracking de hoy ───────────────────────────────────────────────────────
+    try:
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        blocks = list_timeblocks(day_start.isoformat(), now.isoformat())
+        lines.append(f"⏱ {bold('Tracking hoy')}")
+        lines.append(SEP)
+        if blocks:
+            total_mins = 0
+            for b in blocks:
+                dt_s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
+                dt_e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
+                mins = int((dt_e - dt_s).total_seconds() / 60)
+                total_mins += mins
+                h, m = divmod(mins, 60)
+                dur = f"{h}h{m:02d}m" if h else f"{m}m"
+                lines.append(f"• {esc(dt_s.strftime('%H:%M'))}–{esc(dt_e.strftime('%H:%M'))}  {esc(b['activity'])}  _{esc(dur)}_")
+            th, tm = divmod(total_mins, 60)
+            total_str = f"{th}h{tm:02d}m" if th else f"{tm}m"
+            lines.append(f"  {italic(f'Total: {total_str}')}")
+        else:
+            lines.append(italic("Sin bloques registrados hoy"))
+    except Exception as exc:
+        lines.append(f"⏱ {bold('Tracking hoy')}")
+        lines.append(SEP)
+        lines.append(italic(f"Error: {exc}"))
 
     lines.append("")
 
