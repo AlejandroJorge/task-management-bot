@@ -111,11 +111,6 @@ def build_digest() -> str:
                     lines.append(f"🔴 {bold('En curso:')} {esc(activity)}  desde {esc(dt_s.strftime('%H:%M'))} _{esc(dur)}_")
                 else:
                     lines.append(f"• {esc(dt_s.strftime('%H:%M'))}–{esc(dt_e.strftime('%H:%M'))}  {esc(activity)}  _{esc(dur)}_")
-            total_mins = sum(e[3] for e in entries)
-            if total_mins > 0:
-                th, tm = divmod(total_mins, 60)
-                total_str = f"{th}h{tm:02d}m" if th else f"{tm}m"
-                lines.append(f"  {italic(f'Total: {total_str}')}")
     except Exception as exc:
         lines.append(italic(f"Error: {exc}"))
 
