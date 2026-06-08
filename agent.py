@@ -153,6 +153,13 @@ class ConfirmationRequest:
     pending_messages: list[dict]
 
 
+def _trim_history(history: list[dict], max_turns: int = 15) -> None:
+    user_indices = [i for i, m in enumerate(history) if m.get("role") == "user"]
+    if len(user_indices) > max_turns:
+        cut = user_indices[-max_turns]
+        del history[1:cut]
+
+
 def _placeholder(call_id: str) -> dict:
     return {
         "role": "tool",
@@ -172,9 +179,7 @@ async def process(
 
     history.append({"role": "user", "content": user_message})
 
-    # TODO: sliding window — history grows unboundedly; after ~15 turns costs spike.
-    # Trim to history[0] (system) + last N messages, cutting only at full-turn boundaries
-    # to avoid orphaned tool_call/tool result pairs that DeepSeek rejects.
+    _trim_history(history)
     while True:
         response = await llm.chat(history, tools=TOOLS)
         history.append(response)

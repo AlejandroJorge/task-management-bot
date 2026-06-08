@@ -39,9 +39,12 @@ async def auth_check(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends the daily digest (events + tasks) at scheduled times."""
+    from handlers import clear_history
+    chat_id = context.job.data
+    clear_history(chat_id)
     text = build_digest()
     await context.bot.send_message(
-        chat_id=context.job.data, text=text, parse_mode="MarkdownV2"
+        chat_id=chat_id, text=text, parse_mode="MarkdownV2"
     )
 
 

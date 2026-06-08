@@ -135,10 +135,14 @@ async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
-async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
+def clear_history(chat_id: int) -> None:
     _histories[chat_id].clear()
     _pending.pop(chat_id, None)
+
+
+async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.effective_chat.id
+    clear_history(chat_id)
     await update.message.reply_text("Historial borrado.")
 
 
@@ -183,4 +187,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         lines += ["", esc("Responde si o no.")]
         await _reply(update.message, "\n".join(lines), parse_mode="MarkdownV2")
     else:
+        if len(_histories[chat_id]) > 40:
+            result += "\n\n_(Historial largo — considera /clear si empiezas un tema nuevo)_"
         await _reply(update.message, result)
