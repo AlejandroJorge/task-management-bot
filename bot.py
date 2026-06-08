@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 import auth
 import tracking_state
-from handlers import backlog, clear, handle_message, help_command, login, ls, start
+from handlers import backlog, clear, handle_message, help_command, login, start, status
 from jobs import auth_check, digest_job, event_notifier, tracking_persist_job, tracking_sync_job
 
 logging.basicConfig(
@@ -34,7 +34,7 @@ def main() -> None:
     app.add_handler(CommandHandler("help",     help_command, filters=me))
     app.add_handler(CommandHandler("clear",    clear,        filters=me))
     app.add_handler(CommandHandler("login",    login,        filters=me))
-    app.add_handler(CommandHandler("ls",       ls,           filters=me))
+    app.add_handler(CommandHandler("status",   status,       filters=me))
     app.add_handler(CommandHandler("backlog",  backlog,      filters=me))
 
     # ── message handlers (owner only) ─────────────────────────────────────────

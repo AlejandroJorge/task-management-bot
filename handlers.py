@@ -81,7 +81,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "*Comandos disponibles*\n\n"
-        "/ls — resumen del dia: eventos y tareas\n"
+        "/status — resumen del dia: eventos, tracking y tareas\n"
         "/backlog — ver ideas a largo plazo\n"
         "/clear — borrar historial de conversacion\n"
         "/login — autenticar Google Calendar\n"
@@ -118,7 +118,7 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 
-async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
 
 

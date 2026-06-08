@@ -101,9 +101,9 @@ def build_digest() -> str:
 
         entries.sort(key=lambda x: x[0])
 
+        if not is_active:
+            lines.append(italic("⚪ Libre"))
         if not entries:
-            lines.append(italic("Sin bloques registrados hoy"))
-        else:
             for dt_s, dt_e, activity, mins, is_live in entries:
                 h, m = divmod(mins, 60)
                 dur = f"{h}h{m:02d}m" if h else f"{m}m"
