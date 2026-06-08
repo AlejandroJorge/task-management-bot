@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import urllib.parse
 
 from google_auth_oauthlib.flow import Flow
 from tinydb import TinyDB
@@ -88,6 +87,7 @@ async def _handle_callback(reader: asyncio.StreamReader, writer: asyncio.StreamW
         logger.info("Constructed full_url: %s", full_url)
         logger.info("Expected redirect_uri: %s", _REDIRECT_URI)
 
+        import urllib.parse
         parsed = urllib.parse.urlparse(path)
         params = urllib.parse.parse_qs(parsed.query)
         code = params.get("code", [None])[0]
@@ -188,22 +188,3 @@ async def await_login_result(timeout: float = 300) -> None:
         raise RuntimeError("Tiempo de espera agotado. Intenta de nuevo con /login.")
 
 
-def exchange_code(raw: str) -> None:
-    """Fallback: accept the raw redirect URL or bare code (for local/manual use)."""
-    global _flow, _refresh_token
-    if _flow is None:
-        raise RuntimeError("No hay login en progreso — envía /login primero.")
-    raw = raw.strip()
-    parsed = urllib.parse.urlparse(raw)
-    params = urllib.parse.parse_qs(parsed.query)
-    logger.info("exchange_code called. has_scheme=%s has_code=%s", bool(parsed.scheme), "code" in params)
-    if "code" in params and parsed.scheme:
-        _flow.fetch_token(authorization_response=raw)
-    else:
-        _flow.fetch_token(code=raw)
-    _refresh_token = _flow.credentials.refresh_token
-    _save_token(_refresh_token)
-    _flow = None
-    if _pending_future and not _pending_future.done():
-        _pending_future.set_result(None)
-    logger.info("exchange_code completed successfully.")

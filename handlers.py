@@ -70,7 +70,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/backlog — ver ideas a largo plazo\n"
         "/clear — borrar historial de conversacion\n"
         "/login — autenticar Google Calendar\n"
-        "/authcode — completar login (pegar URL del navegador)\n"
         "/help — este mensaje\n\n"
         "O escribe directamente lo que necesitas.",
         parse_mode="Markdown",
@@ -102,23 +101,6 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.exception("Login failed")
         await update.message.reply_text(f"Error de autenticacion: {e}")
 
-
-async def authcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    raw = " ".join(context.args or []).strip()
-    if not raw:
-        await update.message.reply_text("Uso: `/authcode <url del navegador>`", parse_mode="Markdown")
-        return
-    try:
-        auth.exchange_code(raw)
-        chat_id = update.effective_chat.id
-        _histories[chat_id].clear()
-        _pending.pop(chat_id, None)
-        await update.message.reply_text("Autenticado. Google Calendar listo.")
-    except RuntimeError as e:
-        await update.message.reply_text(str(e))
-    except Exception as e:
-        logger.exception("Auth exchange failed")
-        await update.message.reply_text(f"Error de autenticacion: {e}")
 
 
 async def ls(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
