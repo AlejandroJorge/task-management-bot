@@ -277,13 +277,24 @@ TOOLS = [
             "name": "start_tracking",
             "description": (
                 "Start a live tracking session for an activity. "
-                "Creates an event in the Tracking calendar immediately and keeps its end time updated every 5 minutes. "
-                "Fails if a session is already active — call stop_tracking first."
+                "Creates an event in the Tracking calendar and keeps its end time updated every 5 minutes. "
+                "Fails if a session is already active — call stop_tracking first. "
+                "Use started_at when the user says they have already been doing something for a while "
+                "(e.g. 'I've been watching YouTube for 30 minutes') — pass the real past start time so "
+                "elapsed time and the Calendar block reflect the actual duration."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "activity": {"type": "string", "description": "Name of the activity to track"},
+                    "started_at": {
+                        "type": "string",
+                        "description": (
+                            "Optional. ISO 8601 with offset (e.g. 2026-06-07T22:17:00-05:00). "
+                            "Use when the activity already started before now. "
+                            "Must be in the past and have no overlapping timeblocks."
+                        ),
+                    },
                 },
                 "required": ["activity"],
             },

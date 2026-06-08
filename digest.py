@@ -84,32 +84,38 @@ def build_digest() -> str:
         blocks = list_timeblocks(day_start.isoformat(), now.isoformat())
         completed = [b for b in blocks if b["event_id"] != live_event_id]
 
-        if is_active:
-            try:
-                started = datetime.fromisoformat(live["started_at"]).astimezone(_tz.LIMA)
-                since = esc(started.strftime("%H:%M"))
-            except Exception:
-                since = "?"
-            h, m = divmod(elapsed_mins, 60)
-            dur = f"{h}h{m:02d}m" if h else f"{m}m"
-            lines.append(f"🔴 {bold('En curso:')} {esc(live['activity'])}  desde {since} _{esc(dur)}_")
-
-        total_mins = elapsed_mins
+        # Build unified chronological list: (start_dt, end_dt|None, activity, mins, is_live)
+        entries = []
         for b in completed:
             dt_s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
             dt_e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
             mins = max(0, int((dt_e - dt_s).total_seconds() / 60))
-            total_mins += mins
-            h, m = divmod(mins, 60)
-            dur = f"{h}h{m:02d}m" if h else f"{m}m"
-            lines.append(f"• {esc(dt_s.strftime('%H:%M'))}–{esc(dt_e.strftime('%H:%M'))}  {esc(b['activity'])}  _{esc(dur)}_")
+            entries.append((dt_s, dt_e, b["activity"], mins, False))
 
-        if not is_active and not completed:
+        if is_active:
+            try:
+                started = datetime.fromisoformat(live["started_at"]).astimezone(_tz.LIMA)
+                entries.append((started, None, live["activity"], elapsed_mins, True))
+            except Exception:
+                entries.append((now, None, live.get("activity", "?"), elapsed_mins, True))
+
+        entries.sort(key=lambda x: x[0])
+
+        if not entries:
             lines.append(italic("Sin bloques registrados hoy"))
-        elif total_mins > 0:
-            th, tm = divmod(total_mins, 60)
-            total_str = f"{th}h{tm:02d}m" if th else f"{tm}m"
-            lines.append(f"  {italic(f'Total: {total_str}')}")
+        else:
+            for dt_s, dt_e, activity, mins, is_live in entries:
+                h, m = divmod(mins, 60)
+                dur = f"{h}h{m:02d}m" if h else f"{m}m"
+                if is_live:
+                    lines.append(f"🔴 {bold('En curso:')} {esc(activity)}  desde {esc(dt_s.strftime('%H:%M'))} _{esc(dur)}_")
+                else:
+                    lines.append(f"• {esc(dt_s.strftime('%H:%M'))}–{esc(dt_e.strftime('%H:%M'))}  {esc(activity)}  _{esc(dur)}_")
+            total_mins = sum(e[3] for e in entries)
+            if total_mins > 0:
+                th, tm = divmod(total_mins, 60)
+                total_str = f"{th}h{tm:02d}m" if th else f"{tm}m"
+                lines.append(f"  {italic(f'Total: {total_str}')}")
     except Exception as exc:
         lines.append(italic(f"Error: {exc}"))
 

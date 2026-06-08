@@ -101,29 +101,51 @@ def sync_to_calendar() -> None:
         _recreate_event()
 
 
-def start_tracking(activity: str) -> dict:
+def start_tracking(activity: str, started_at: str | None = None) -> dict:
     global _state
     if _state.get("status") == "ACTIVO":
         raise ValueError(
             f"Ya estás trackeando '{_state['activity']}'. Deténlo primero con stop_tracking."
         )
     now = _tz.now()
+
+    if started_at:
+        try:
+            event_start = datetime.fromisoformat(started_at)
+        except ValueError:
+            raise ValueError("started_at debe ser ISO 8601 con zona horaria, ej. 2026-06-07T22:17:00-05:00")
+        if event_start.tzinfo is None:
+            raise ValueError("started_at debe incluir zona horaria (ej. -05:00)")
+        if event_start >= now:
+            raise ValueError("started_at debe ser un momento en el pasado")
+        items = _service().events().list(
+            calendarId=_get_calendar_id(_TRACKING),
+            timeMin=event_start.isoformat(),
+            timeMax=now.isoformat(),
+            singleEvents=True,
+        ).execute().get("items", [])
+        if items:
+            names = ", ".join(e.get("summary", "?") for e in items)
+            raise ValueError(f"Hay bloques registrados en ese intervalo ({names})")
+    else:
+        event_start = now
+
     event = _service().events().insert(
         calendarId=_get_calendar_id(_TRACKING),
         body={
             "summary": activity,
-            "start": {"dateTime": now.isoformat()},
+            "start": {"dateTime": event_start.isoformat()},
             "end": {"dateTime": (now + timedelta(minutes=1)).isoformat()},
         },
     ).execute()
     _state = {
         "status": "ACTIVO",
         "activity": activity,
-        "started_at": now.isoformat(),
+        "started_at": event_start.isoformat(),
         "event_id": event["id"],
     }
     save_state()
-    logger.info("Tracking started: %s [event_id=%s]", activity, event["id"])
+    logger.info("Tracking started: %s [event_id=%s, started_at=%s]", activity, event["id"], event_start.isoformat())
     return get_state()
 
 

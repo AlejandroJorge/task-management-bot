@@ -38,7 +38,7 @@ def _system_prompt() -> str:
         "Las tareas son acciones inmediatas; el backlog son ideas o proyectos a largo plazo. "
         "REGLAS DE TRACKING DE TIEMPO: "
         "(1) create_timeblock → SOLO para registrar intervalos 100% pasados. NO toca ni interrumpe ninguna sesión en vivo. "
-        "(2) start_tracking → arranca una sesión en vivo desde AHORA creando un evento nuevo. "
+        "(2) start_tracking → arranca una sesión en vivo. Si el usuario dice 'llevo N minutos/horas haciendo X', usa el parámetro opcional started_at con la hora de inicio real (now − N minutos) para que el elapsed y el bloque en Calendar reflejen el tiempo real. "
         "(3) stop_tracking → termina la sesión activa con hora exacta. Solo cuando el usuario diga que terminó. "
         "(4) resume_as_live → cuando el usuario dice que SIGUE haciendo algo ya registrado como bloque pasado: adopta ese evento como sesión activa. Falla si hay otros bloques entre el fin de ese evento y ahora. "
         "(5) get_tracking_status → estado actual. elapsed_minutes = now - started_at. Si el usuario cuestiona el tiempo, explícalo; NUNCA reinicies la sesión. "
