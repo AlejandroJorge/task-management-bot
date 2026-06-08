@@ -111,6 +111,44 @@ def start_tracking(activity: str) -> dict:
     return get_state()
 
 
+def resume_as_live(event_id: str) -> dict:
+    global _state
+    if _state.get("status") == "ACTIVO":
+        raise ValueError(
+            f"Ya estás trackeando '{_state['activity']}'. Deténlo primero con stop_tracking."
+        )
+    svc = _service()
+    cal_id = _get_calendar_id(_TRACKING)
+    event = svc.events().get(calendarId=cal_id, eventId=event_id).execute()
+    activity = event.get("summary", "Actividad")
+    original_end = event["end"]["dateTime"]
+    now = _tz.now()
+
+    items = svc.events().list(
+        calendarId=cal_id,
+        timeMin=original_end,
+        timeMax=now.isoformat(),
+        singleEvents=True,
+    ).execute().get("items", [])
+    conflicts = [e for e in items if e.get("id") != event_id]
+    if conflicts:
+        names = ", ".join(e.get("summary", "?") for e in conflicts)
+        raise ValueError(
+            f"No se puede extender: hay bloques registrados entre el fin del bloque y ahora ({names})."
+        )
+
+    _patch_end(event_id, now.isoformat())
+    _state = {
+        "status": "ACTIVO",
+        "activity": activity,
+        "started_at": event["start"]["dateTime"],
+        "event_id": event_id,
+    }
+    save_state()
+    logger.info("Tracking resumed from existing block: %s [event_id=%s]", activity, event_id)
+    return get_state()
+
+
 def stop_tracking() -> dict:
     global _state
     if _state.get("status") != "ACTIVO":

@@ -9,7 +9,7 @@ from backlog_tools import (
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
 from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
-from tracking_state import get_state as get_tracking_status, start_tracking, stop_tracking
+from tracking_state import get_state as get_tracking_status, resume_as_live, start_tracking, stop_tracking
 
 # Tools that require explicit user confirmation before execution
 REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item", "delete_timeblock"}
@@ -305,6 +305,26 @@ TOOLS = [
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "resume_as_live",
+            "description": (
+                "Adopt an existing past timeblock as the current live tracking session. "
+                "Use when the user says they are still doing an activity that was already registered as a finished block. "
+                "Extends the event's end to now and starts the 5-minute sync. "
+                "Fails if there are other timeblocks between that event's end and now (would cause overlap), "
+                "or if a session is already active."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string", "description": "ID of the existing timeblock to resume as live"},
+                },
+                "required": ["event_id"],
+            },
+        },
+    },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
@@ -329,6 +349,7 @@ _SYNC_DISPATCH: dict = {
     "start_tracking":      start_tracking,
     "stop_tracking":       stop_tracking,
     "get_tracking_status": get_tracking_status,
+    "resume_as_live":      resume_as_live,
 }
 
 
