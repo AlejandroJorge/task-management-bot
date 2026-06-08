@@ -172,6 +172,9 @@ async def process(
 
     history.append({"role": "user", "content": user_message})
 
+    # TODO: sliding window — history grows unboundedly; after ~15 turns costs spike.
+    # Trim to history[0] (system) + last N messages, cutting only at full-turn boundaries
+    # to avoid orphaned tool_call/tool result pairs that DeepSeek rejects.
     while True:
         response = await llm.chat(history, tools=TOOLS)
         history.append(response)

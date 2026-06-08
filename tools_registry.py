@@ -221,13 +221,7 @@ TOOLS = [
                     "category": {
                         "type": "string",
                         "enum": list(load_categories().keys()),
-                        "description": (
-                            "Activity category. Infer it from the activity name and context. "
-                            + "; ".join(
-                                f"{k}: {v['label']} — {v['description']}"
-                                for k, v in load_categories().items()
-                            )
-                        ),
+                        "description": "Activity category. Infer from the activity name; descriptions are in the system prompt.",
                     },
                 },
                 "required": ["activity", "start", "end", "category"],
@@ -342,13 +336,7 @@ TOOLS = [
                     "category": {
                         "type": "string",
                         "enum": list(load_categories().keys()),
-                        "description": (
-                            "Activity category. Infer it from the activity name and context. "
-                            + "; ".join(
-                                f"{k}: {v['label']} — {v['description']}"
-                                for k, v in load_categories().items()
-                            )
-                        ),
+                        "description": "Activity category. Infer from the activity name; descriptions are in the system prompt.",
                     },
                 },
                 "required": ["activity", "category"],
@@ -397,7 +385,10 @@ TOOLS = [
 
 _SYNC_DISPATCH: dict = {
     "create_event":        create_event,
-    "list_events":         list_events,
+    "list_events":         lambda **kw: [
+                               {k: e[k] for k in ("id", "summary", "start", "end", "description", "location") if k in e}
+                               for e in list_events(**kw)
+                           ],
     "update_event":        lambda **kw: update_event(kw.pop("event_id"), **kw),
     "delete_event":        delete_event,
     "create_task":         create_task,

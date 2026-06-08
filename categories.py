@@ -22,7 +22,5 @@ def categories_for_prompt() -> str:
     cats = load_categories()
     lines = ["Categorías para timeblocks (usa la key exacta al llamar herramientas):"]
     for key, cat in cats.items():
-        examples = ", ".join(cat.get("examples", [])[:3])
-        ex_str = f" (ej: {examples})" if examples else ""
-        lines.append(f"  - {key}: {cat['label']} — {cat['description']}{ex_str}")
+        lines.append(f"  - {key}: {cat['label']} — {cat['description']}")
     return "\n".join(lines)
