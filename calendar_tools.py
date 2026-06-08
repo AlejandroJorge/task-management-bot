@@ -12,7 +12,29 @@ import auth
 logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
-CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID", "primary")
+
+_EVENTOS  = "Eventos"
+_TRACKING = "Tracking"  # reserved for future tracking tools
+
+_calendar_ids: dict[str, str] = {}
+
+
+def _get_calendar_id(name: str) -> str:
+    if name in _calendar_ids:
+        return _calendar_ids[name]
+    svc = _service()
+    items = svc.calendarList().list().execute().get("items", [])
+    for cal in items:
+        if cal.get("summary") == name:
+            _calendar_ids[name] = cal["id"]
+            logger.info("Resolved calendar '%s' → %s", name, cal["id"])
+            return cal["id"]
+    logger.info("Calendar '%s' not found — creating it.", name)
+    created = svc.calendars().insert(body={"summary": name}).execute()
+    cal_id = created["id"]
+    _calendar_ids[name] = cal_id
+    logger.info("Created calendar '%s' → %s", name, cal_id)
+    return cal_id
 
 
 def _service():
@@ -40,7 +62,7 @@ def _service():
 
 
 def get_event(event_id: str) -> dict:
-    return _service().events().get(calendarId=CALENDAR_ID, eventId=event_id).execute()
+    return _service().events().get(calendarId=_get_calendar_id(_EVENTOS), eventId=event_id).execute()
 
 
 def create_event(
@@ -58,7 +80,7 @@ def create_event(
         "start": {"dateTime": start, "timeZone": tz},
         "end": {"dateTime": end, "timeZone": tz},
     }
-    return _service().events().insert(calendarId=CALENDAR_ID, body=body).execute()
+    return _service().events().insert(calendarId=_get_calendar_id(_EVENTOS), body=body).execute()
 
 
 def list_events(
@@ -69,7 +91,7 @@ def list_events(
     if time_min is None:
         time_min = datetime.now(tz=timezone.utc).isoformat()
     kwargs: dict = dict(
-        calendarId=CALENDAR_ID,
+        calendarId=_get_calendar_id(_EVENTOS),
         timeMin=time_min,
         maxResults=max_results,
         singleEvents=True,
@@ -99,10 +121,10 @@ def update_event(event_id: str, **fields) -> dict:
     return (
         _service()
         .events()
-        .patch(calendarId=CALENDAR_ID, eventId=event_id, body=body)
+        .patch(calendarId=_get_calendar_id(_EVENTOS), eventId=event_id, body=body)
         .execute()
     )
 
 
 def delete_event(event_id: str) -> None:
-    _service().events().delete(calendarId=CALENDAR_ID, eventId=event_id).execute()
+    _service().events().delete(calendarId=_get_calendar_id(_EVENTOS), eventId=event_id).execute()
