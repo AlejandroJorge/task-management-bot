@@ -45,12 +45,6 @@ async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 
-async def tracking_persist_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Runs every minute. Persists in-memory tracking state to JSON."""
-    from tracking_state import save_state
-    save_state()
-
-
 async def tracking_sync_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Runs every 5 minutes. Syncs active tracking session end time to Google Calendar."""
     from tracking_state import sync_to_calendar

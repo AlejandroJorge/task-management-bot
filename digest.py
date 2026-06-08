@@ -103,7 +103,7 @@ def build_digest() -> str:
 
         if not is_active:
             lines.append(italic("⚪ Libre"))
-        if not entries:
+        if entries:
             for dt_s, dt_e, activity, mins, is_live in entries:
                 h, m = divmod(mins, 60)
                 dur = f"{h}h{m:02d}m" if h else f"{m}m"
