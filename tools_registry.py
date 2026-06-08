@@ -9,7 +9,7 @@ from backlog_tools import (
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
 from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
-from tracking_state import get_state as get_tracking_status, resume_as_live, start_tracking, stop_tracking
+from tracking_state import extend_tracking, get_state as get_tracking_status, resume_as_live, start_tracking, stop_tracking
 
 # Tools that require explicit user confirmation before execution
 REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item", "delete_timeblock"}
@@ -274,6 +274,24 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "extend_tracking",
+            "description": (
+                "Extend the planned end of an active planificado tracking session by N minutes from now. "
+                "Use when the user says they want to continue the current activity for N more minutes "
+                "after being asked if they want to extend. Only valid for planificado sessions."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "minutes": {"type": "integer", "description": "Additional minutes from now"},
+                },
+                "required": ["minutes"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "start_tracking",
             "description": (
                 "Start a live tracking session for an activity. "
@@ -293,6 +311,14 @@ TOOLS = [
                             "Optional. ISO 8601 with offset (e.g. 2026-06-07T22:17:00-05:00). "
                             "Use when the activity already started before now. "
                             "Must be in the past and have no overlapping timeblocks."
+                        ),
+                    },
+                    "planned_minutes": {
+                        "type": "integer",
+                        "description": (
+                            "Optional. Planned duration in minutes. Use when the user says "
+                            "'I want to do X for 30 minutes / 1 hour'. Enables planificado mode: "
+                            "bot stays quiet until 5 min before end, then asks to extend or stop."
                         ),
                     },
                 },
@@ -357,6 +383,7 @@ _SYNC_DISPATCH: dict = {
     "list_timeblocks":     list_timeblocks,
     "update_timeblock":    lambda **kw: update_timeblock(kw.pop("event_id"), **kw),
     "delete_timeblock":    delete_timeblock,
+    "extend_tracking":     extend_tracking,
     "start_tracking":      start_tracking,
     "stop_tracking":       lambda **_: stop_tracking(),
     "get_tracking_status": lambda **_: get_tracking_status(),

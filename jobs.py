@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 
 import tz as _tz
@@ -49,6 +50,72 @@ async def tracking_sync_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Runs every 5 minutes. Syncs active tracking session end time to Google Calendar."""
     from tracking_state import sync_to_calendar
     sync_to_calendar()
+
+
+# ── tracking_active_job state ─────────────────────────────────────────────────
+_active_last_event_id: str | None = None
+_active_last_nudge: datetime | None = None
+_active_plan_warned: bool = False
+_active_plan_ended_asked: bool = False
+
+
+async def tracking_active_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs every minute. Handles indefinido check-ins and planificado end notifications."""
+    global _active_last_event_id, _active_last_nudge, _active_plan_warned, _active_plan_ended_asked
+    from tracking_state import get_state
+
+    state = get_state()
+    if state.get("status") != "ACTIVO":
+        _active_last_event_id = None
+        return
+
+    # Reset state when a new session starts
+    current_event_id = state.get("event_id")
+    if current_event_id != _active_last_event_id:
+        _active_last_nudge = None
+        _active_plan_warned = False
+        _active_plan_ended_asked = False
+        _active_last_event_id = current_event_id
+
+    now = _tz.now()
+    activity = state.get("activity", "esto")
+    mode = state.get("mode", "indefinido")
+
+    if mode == "indefinido":
+        nudge_mins = int(os.getenv("TRACKING_ACTIVE_NUDGE_MINUTES", "20"))
+        if _active_last_nudge is None or (now - _active_last_nudge).total_seconds() / 60 >= nudge_mins:
+            await context.bot.send_message(
+                chat_id=context.job.data,
+                text=f"¿Sigues haciendo *{esc_md1(activity)}*?",
+                parse_mode="Markdown",
+            )
+            _active_last_nudge = now
+
+    elif mode == "planificado":
+        minutes_remaining = state.get("minutes_remaining", 0)
+
+        if not _active_plan_warned and 0 < minutes_remaining <= 5:
+            try:
+                started = datetime.fromisoformat(state["started_at"])
+                planned_end = datetime.fromisoformat(state["planned_end"])
+                total_planned = (planned_end - started).total_seconds() / 60
+            except Exception:
+                total_planned = 999
+            if total_planned > 5:
+                await context.bot.send_message(
+                    chat_id=context.job.data,
+                    text=f"Quedan 5 min de *{esc_md1(activity)}*. ¿Quieres extender el tiempo?",
+                    parse_mode="Markdown",
+                )
+                _active_plan_warned = True
+
+        if not _active_plan_ended_asked and minutes_remaining <= 0:
+            await context.bot.send_message(
+                chat_id=context.job.data,
+                text=f"Se acabó el tiempo de *{esc_md1(activity)}*. ¿Terminaste o quieres extender?",
+                parse_mode="Markdown",
+            )
+            _active_plan_ended_asked = True
 
 
 async def tracking_nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:

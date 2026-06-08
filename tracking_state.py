@@ -43,13 +43,21 @@ def save_state() -> None:
 
 def get_state() -> dict:
     state = dict(_state)
-    if state.get("status") == "ACTIVO" and state.get("started_at"):
-        try:
-            started = datetime.fromisoformat(state["started_at"])
-            elapsed = max(0, int((_tz.now() - started).total_seconds() / 60))
-            state["elapsed_minutes"] = elapsed
-        except Exception:
-            state["elapsed_minutes"] = 0
+    if state.get("status") == "ACTIVO":
+        now = _tz.now()
+        if state.get("started_at"):
+            try:
+                started = datetime.fromisoformat(state["started_at"])
+                elapsed = max(0, int((now - started).total_seconds() / 60))
+                state["elapsed_minutes"] = elapsed
+            except Exception:
+                state["elapsed_minutes"] = 0
+        if state.get("planned_end"):
+            try:
+                planned_end = datetime.fromisoformat(state["planned_end"])
+                state["minutes_remaining"] = int((planned_end - now).total_seconds() / 60)
+            except Exception:
+                pass
     return state
 
 
@@ -101,7 +109,7 @@ def sync_to_calendar() -> None:
         _recreate_event()
 
 
-def start_tracking(activity: str, started_at: str | None = None) -> dict:
+def start_tracking(activity: str, started_at: str | None = None, planned_minutes: int | None = None) -> dict:
     global _state
     if _state.get("status") == "ACTIVO":
         raise ValueError(
@@ -143,9 +151,34 @@ def start_tracking(activity: str, started_at: str | None = None) -> dict:
         "activity": activity,
         "started_at": event_start.isoformat(),
         "event_id": event["id"],
+        "mode": "indefinido",
     }
+    if planned_minutes is not None:
+        if planned_minutes <= 0:
+            raise ValueError("planned_minutes debe ser mayor que 0")
+        planned_end = event_start + timedelta(minutes=planned_minutes)
+        _state["mode"] = "planificado"
+        _state["planned_end"] = planned_end.isoformat()
     save_state()
-    logger.info("Tracking started: %s [event_id=%s, started_at=%s]", activity, event["id"], event_start.isoformat())
+    logger.info(
+        "Tracking started: %s [event_id=%s, mode=%s]",
+        activity, event["id"], _state["mode"],
+    )
+    return get_state()
+
+
+def extend_tracking(minutes: int) -> dict:
+    global _state
+    if _state.get("status") != "ACTIVO":
+        raise ValueError("No hay ninguna sesión de tracking activa.")
+    if _state.get("mode") != "planificado":
+        raise ValueError("La sesión es indefinida; no tiene fin planificado. Usa stop_tracking cuando termines.")
+    if minutes <= 0:
+        raise ValueError("minutes debe ser mayor que 0")
+    new_end = _tz.now() + timedelta(minutes=minutes)
+    _state["planned_end"] = new_end.isoformat()
+    save_state()
+    logger.info("Tracking extended: %s → new planned_end %s", _state.get("activity"), new_end.strftime("%H:%M"))
     return get_state()
 
 

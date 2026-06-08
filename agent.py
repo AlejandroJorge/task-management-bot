@@ -43,6 +43,8 @@ def _system_prompt() -> str:
         "(4) resume_as_live → cuando el usuario dice que SIGUE haciendo algo ya registrado como bloque pasado: adopta ese evento como sesión activa. Falla si hay otros bloques entre el fin de ese evento y ahora. "
         "(5) get_tracking_status → estado actual. elapsed_minutes = now - started_at. Si el usuario cuestiona el tiempo, explícalo; NUNCA reinicies la sesión. "
         "(6) NUNCA llames stop_tracking para registrar un bloque pasado. Los dos modos son completamente independientes. "
+        "(7) start_tracking con planned_minutes → modo planificado. Úsalo cuando el usuario diga 'voy a hacer X por N minutos/horas'. El bot avisará 5 min antes del fin y al terminar el tiempo. "
+        "(8) extend_tracking(minutes) → cuando el usuario quiere continuar N minutos más en una sesión planificada. Solo válido en modo planificado. "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
         "REGLAS para el campo 'due' al crear o editar tareas: "
         "(1) Si el usuario NO menciona fecha ni plazo, NO incluyas 'due'. "
@@ -62,6 +64,16 @@ def _system_prompt() -> str:
     profile_ctx = user_profile.as_context()
     if profile_ctx:
         base += "\n\n" + profile_ctx
+    try:
+        from tracking_state import get_state as _get_ts
+        ts = _get_ts()
+        if ts.get("status") == "ACTIVO":
+            ts_lines = [f"Tracking activo: {ts['activity']} (modo {ts.get('mode', 'indefinido')}, {ts.get('elapsed_minutes', 0)} min transcurridos)"]
+            if ts.get("mode") == "planificado":
+                ts_lines.append(f"  Fin planificado: {ts.get('planned_end', '?')} ({ts.get('minutes_remaining', '?')} min restantes)")
+            base += "\n\n" + "\n".join(ts_lines)
+    except Exception:
+        pass
     try:
         tasks = list_tasks(show_done=False)
         if tasks:
