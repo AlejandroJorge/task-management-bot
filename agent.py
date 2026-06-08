@@ -153,7 +153,7 @@ class ConfirmationRequest:
     pending_messages: list[dict]
 
 
-def _trim_history(history: list[dict], max_turns: int = 15) -> None:
+def _trim_history(history: list[dict], max_turns: int = 8) -> None:
     user_indices = [i for i, m in enumerate(history) if m.get("role") == "user"]
     if len(user_indices) > max_turns:
         cut = user_indices[-max_turns]
