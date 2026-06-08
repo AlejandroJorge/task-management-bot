@@ -1,43 +1,26 @@
 import os
 
-from tinydb import Query, TinyDB
+from db_utils import db_insert, db_list, db_remove, db_update
 
 DB_PATH = os.getenv("TASKS_DB_PATH", "data/tasks.json")
 
-Task = Query()
-
-
-def _db() -> TinyDB:
-    return TinyDB(DB_PATH)
-
 
 def create_task(title: str, notes: str = "", due: str | None = None) -> int:
-    """Insert a task. Returns the new task's doc_id."""
-    with _db() as db:
-        return db.insert({"title": title, "notes": notes, "due": due, "done": False})
+    return db_insert(DB_PATH, {"title": title, "notes": notes, "due": due, "done": False})
 
 
 def list_tasks(show_done: bool = False) -> list[dict]:
-    """Return tasks sorted by due date ascending; tasks without due date go last."""
-    with _db() as db:
-        docs = db.all() if show_done else db.search(Task.done == False)  # noqa: E712
-        tasks = [{"doc_id": d.doc_id, **d} for d in docs]
+    tasks = db_list(DB_PATH)
+    if not show_done:
+        tasks = [t for t in tasks if not t.get("done")]
     tasks.sort(key=lambda t: (t.get("due") is None, t.get("due") or ""))
     return tasks
 
 
 def update_task(doc_id: int, **fields) -> None:
-    """
-    Update a task by doc_id. Accepted fields:
-      title, notes, due   → strings
-      done                → bool
-    """
     allowed = {k: fields[k] for k in ("title", "notes", "due", "done") if k in fields}
-    with _db() as db:
-        db.update(allowed, doc_ids=[doc_id])
+    db_update(DB_PATH, doc_id, allowed)
 
 
 def delete_task(doc_id: int) -> None:
-    """Delete a task by doc_id."""
-    with _db() as db:
-        db.remove(doc_ids=[doc_id])
+    db_remove(DB_PATH, doc_id)

@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 import auth
 from calendar_tools import list_events
 from digest import build_digest
-from formatting import bold, esc, esc_md1, fmt_due, italic
+from formatting import bold, esc, esc_md1, italic
 from tasks_tools import list_tasks as _list_tasks
 
 logger = logging.getLogger(__name__)

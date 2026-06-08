@@ -17,16 +17,54 @@ Flow:
 import dataclasses
 import json
 import logging
-import tz as _tz
-import user_profile
+import os
 from typing import Any
 
 import llm
-
-logger = logging.getLogger(__name__)
+import tz as _tz
 from backlog_tools import list_backlog
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
+from tracking_state import get_state as _get_tracking_state
+
+logger = logging.getLogger(__name__)
+
+_PROFILE_PATH = os.getenv("USER_PROFILE_PATH", "data/user_profile.json")
+
+
+def _profile_context() -> str:
+    try:
+        with open(_PROFILE_PATH, encoding="utf-8") as f:
+            import json as _json
+            profile = _json.load(f)
+    except FileNotFoundError:
+        return ""
+    except Exception:
+        logger.exception("Failed to load user profile")
+        return ""
+    if not profile:
+        return ""
+    lines = ["Información sobre el usuario:"]
+    for key, label in [("name", "Nombre"), ("location", "Ubicación"),
+                       ("timezone_label", "Zona horaria"), ("education", "Educación"),
+                       ("work", "Trabajo")]:
+        if profile.get(key):
+            lines.append(f"  - {label}: {profile[key]}")
+    schedule = profile.get("schedule", {})
+    if schedule:
+        parts = []
+        if schedule.get("work_days"):
+            parts.append(f"trabajo {schedule['work_days']}")
+        if schedule.get("work_hours"):
+            parts.append(schedule["work_hours"])
+        if schedule.get("class_days"):
+            parts.append(f"clases {schedule['class_days']}")
+        if parts:
+            lines.append(f"  - Horario: {', '.join(parts)}")
+    for fact in profile.get("facts", []):
+        if fact:
+            lines.append(f"  - {fact}")
+    return "\n".join(lines)
 
 
 def _system_prompt() -> str:
@@ -61,12 +99,11 @@ def _system_prompt() -> str:
         "NUNCA menciones doc_id, event_id ni ningún identificador interno al usuario. "
         "Refierete a tareas y eventos solo por su nombre."
     )
-    profile_ctx = user_profile.as_context()
+    profile_ctx = _profile_context()
     if profile_ctx:
         base += "\n\n" + profile_ctx
     try:
-        from tracking_state import get_state as _get_ts
-        ts = _get_ts()
+        ts = _get_tracking_state()
         if ts.get("status") == "ACTIVO":
             ts_lines = [f"Tracking activo: {ts['activity']} (modo {ts.get('mode', 'indefinido')}, {ts.get('elapsed_minutes', 0)} min transcurridos)"]
             if ts.get("mode") == "planificado":

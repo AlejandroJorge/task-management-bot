@@ -1,8 +1,7 @@
 """MarkdownV2 helpers for bot-generated messages."""
 from datetime import date, datetime
-from zoneinfo import ZoneInfo
 
-_LIMA = ZoneInfo("America/Lima")
+from tz import LIMA as _LIMA
 
 SEP = "──────────────"  # Unicode line, safe in MarkdownV2 (no escaping needed)
 
@@ -46,6 +45,12 @@ def fecha_es(dt) -> str:
     dia = _DIAS[dt.weekday()].capitalize()
     mes = _MESES[dt.month - 1]
     return f"{dia}, {dt.day:02d} de {mes} de {dt.year}"
+
+
+def fmt_duration(minutes: int) -> str:
+    """Format a duration in minutes as 'Xh YYm' or 'YYm'."""
+    h, m = divmod(abs(int(minutes)), 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m"
 
 
 def fmt_due(due_str: str) -> str:

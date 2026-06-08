@@ -11,6 +11,7 @@ from formatting import (
     esc,
     fecha_es,
     fmt_due,
+    fmt_duration,
     italic,
 )
 from tasks_tools import list_tasks
@@ -105,8 +106,7 @@ def build_digest() -> str:
             lines.append(italic("⚪ Libre"))
         if entries:
             for dt_s, dt_e, activity, mins, is_live in entries:
-                h, m = divmod(mins, 60)
-                dur = f"{h}h{m:02d}m" if h else f"{m}m"
+                dur = fmt_duration(mins)
                 if is_live:
                     lines.append(f"🔴 {bold('En curso:')} {esc(activity)}  desde {esc(dt_s.strftime('%H:%M'))} _{esc(dur)}_")
                 else:

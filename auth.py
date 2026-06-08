@@ -178,6 +178,7 @@ def generate_auth_url() -> str:
 
 
 async def await_login_result(timeout: float = 300) -> None:
+    global _flow, _pending_future
     if _pending_future is None:
         raise RuntimeError("No hay login en progreso.")
     logger.info("Waiting for OAuth callback (timeout=%ss)...", timeout)
@@ -185,6 +186,8 @@ async def await_login_result(timeout: float = 300) -> None:
         await asyncio.wait_for(asyncio.shield(_pending_future), timeout=timeout)
         logger.info("OAuth callback resolved successfully.")
     except asyncio.TimeoutError:
+        _flow = None
+        _pending_future = None
         raise RuntimeError("Tiempo de espera agotado. Intenta de nuevo con /login.")
 
 

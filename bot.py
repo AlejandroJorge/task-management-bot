@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
+    _required = ["BOT_TOKEN", "ALLOWED_USER_ID", "DEEPSEEK_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+    if missing := [v for v in _required if not os.getenv(v)]:
+        sys.exit(f"Missing required env vars: {', '.join(missing)}")
+
     token = os.environ["BOT_TOKEN"]
     allowed_user_id = int(os.environ["ALLOWED_USER_ID"])
     chat_id = str(allowed_user_id)
