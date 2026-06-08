@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import tz as _tz
 from calendar_tools import _TRACKING, _get_calendar_id, _service
+from categories import color_id_for
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +79,15 @@ def _recreate_event() -> None:
             logger.warning("Cannot recreate tracking event: started_at missing from state")
             return
         started = datetime.fromisoformat(started_raw)
+        category = _state.get("category", "unclassified")
         event = _service().events().insert(
             calendarId=_get_calendar_id(_TRACKING),
             body={
                 "summary": _state["activity"],
                 "start": {"dateTime": started.isoformat()},
                 "end": {"dateTime": now.isoformat()},
+                "colorId": color_id_for(category) or "3",
+                "extendedProperties": {"private": {"category": category}},
             },
         ).execute()
         _state["event_id"] = event["id"]
@@ -109,7 +113,7 @@ def sync_to_calendar() -> None:
         _recreate_event()
 
 
-def start_tracking(activity: str, started_at: str | None = None, planned_minutes: int | None = None) -> dict:
+def start_tracking(activity: str, started_at: str | None = None, planned_minutes: int | None = None, category: str = "unclassified") -> dict:
     global _state
     if _state.get("status") == "ACTIVO":
         raise ValueError(
@@ -144,6 +148,8 @@ def start_tracking(activity: str, started_at: str | None = None, planned_minutes
             "summary": activity,
             "start": {"dateTime": event_start.isoformat()},
             "end": {"dateTime": (now + timedelta(minutes=1)).isoformat()},
+            "colorId": color_id_for(category) or "3",
+            "extendedProperties": {"private": {"category": category}},
         },
     ).execute()
     _state = {
@@ -152,6 +158,7 @@ def start_tracking(activity: str, started_at: str | None = None, planned_minutes
         "started_at": event_start.isoformat(),
         "event_id": event["id"],
         "mode": "indefinido",
+        "category": category,
     }
     if planned_minutes is not None:
         if planned_minutes <= 0:
@@ -213,11 +220,13 @@ def resume_as_live(event_id: str) -> dict:
         )
 
     _patch_end(event_id, now.isoformat())
+    category = event.get("extendedProperties", {}).get("private", {}).get("category", "unclassified")
     _state = {
         "status": "ACTIVO",
         "activity": activity,
         "started_at": event["start"]["dateTime"],
         "event_id": event_id,
+        "category": category,
     }
     save_state()
     logger.info("Tracking resumed from existing block: %s [event_id=%s]", activity, event_id)

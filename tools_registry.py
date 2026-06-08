@@ -1,5 +1,7 @@
 import json
 
+from categories import load_categories
+
 from backlog_tools import (
     create_backlog_item,
     delete_backlog_item,
@@ -216,8 +218,19 @@ TOOLS = [
                     "start":    {"type": "string", "description": "Start datetime, ISO 8601 with offset"},
                     "end":      {"type": "string", "description": "End datetime, ISO 8601 with offset"},
                     "notes":    {"type": "string", "description": "Optional notes"},
+                    "category": {
+                        "type": "string",
+                        "enum": list(load_categories().keys()),
+                        "description": (
+                            "Activity category. Infer it from the activity name and context. "
+                            + "; ".join(
+                                f"{k}: {v['label']} — {v['description']}"
+                                for k, v in load_categories().items()
+                            )
+                        ),
+                    },
                 },
-                "required": ["activity", "start", "end"],
+                "required": ["activity", "start", "end", "category"],
             },
         },
     },
@@ -252,6 +265,11 @@ TOOLS = [
                     "start":    {"type": "string", "description": "ISO 8601 with offset"},
                     "end":      {"type": "string", "description": "ISO 8601 with offset"},
                     "notes":    {"type": "string"},
+                    "category": {
+                        "type": "string",
+                        "enum": list(load_categories().keys()),
+                        "description": "New category for the timeblock.",
+                    },
                 },
                 "required": ["event_id"],
             },
@@ -321,8 +339,19 @@ TOOLS = [
                             "bot stays quiet until 5 min before end, then asks to extend or stop."
                         ),
                     },
+                    "category": {
+                        "type": "string",
+                        "enum": list(load_categories().keys()),
+                        "description": (
+                            "Activity category. Infer it from the activity name and context. "
+                            + "; ".join(
+                                f"{k}: {v['label']} — {v['description']}"
+                                for k, v in load_categories().items()
+                            )
+                        ),
+                    },
                 },
-                "required": ["activity"],
+                "required": ["activity", "category"],
             },
         },
     },

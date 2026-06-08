@@ -23,6 +23,7 @@ from typing import Any
 import llm
 import tz as _tz
 from backlog_tools import list_backlog
+from categories import categories_for_prompt
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
 from tracking_state import get_state as _get_tracking_state
@@ -83,6 +84,7 @@ def _system_prompt() -> str:
         "(6) NUNCA llames stop_tracking para registrar un bloque pasado. Los dos modos son completamente independientes. "
         "(7) start_tracking con planned_minutes → modo planificado. Úsalo cuando el usuario diga 'voy a hacer X por N minutos/horas'. El bot avisará 5 min antes del fin y al terminar el tiempo. "
         "(8) extend_tracking(minutes) → cuando el usuario quiere continuar N minutos más en una sesión planificada. Solo válido en modo planificado. "
+        "(9) CATEGORÍAS: al llamar create_timeblock o start_tracking, SIEMPRE incluye el parámetro category. Infiere la categoría más apropiada a partir del nombre de la actividad y el contexto. Si hay duda genuina, usa 'unclassified'. "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
         "REGLAS para el campo 'due' al crear o editar tareas: "
         "(1) Si el usuario NO menciona fecha ni plazo, NO incluyas 'due'. "
@@ -99,6 +101,10 @@ def _system_prompt() -> str:
         "NUNCA menciones doc_id, event_id ni ningún identificador interno al usuario. "
         "Refierete a tareas y eventos solo por su nombre."
     )
+    try:
+        base += "\n\n" + categories_for_prompt()
+    except Exception:
+        pass
     profile_ctx = _profile_context()
     if profile_ctx:
         base += "\n\n" + profile_ctx
