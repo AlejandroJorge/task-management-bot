@@ -51,6 +51,14 @@ async def tracking_sync_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     sync_to_calendar()
 
 
+async def tracking_nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Sends a reminder when nothing is being tracked."""
+    from tracking_state import get_state
+    if get_state().get("status") != "LIBRE":
+        return
+    await context.bot.send_message(chat_id=context.job.data, text="¿Qué estás haciendo?")
+
+
 async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Runs every minute. Sends reminders at defined intervals before events."""
     if not auth.get_refresh_token():

@@ -10,7 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 import auth
 import tracking_state
 from handlers import backlog, clear, handle_message, help_command, login, start, status
-from jobs import auth_check, digest_job, event_notifier, tracking_sync_job
+from jobs import auth_check, digest_job, event_notifier, tracking_nudge_job, tracking_sync_job
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -51,6 +51,10 @@ def main() -> None:
 
     # Tracking: sync active session end time to Calendar every 5 min
     jq.run_repeating(tracking_sync_job, interval=300, first=60, name="tracking_sync")
+
+    # Tracking nudge: remind user to track when LIBRE
+    nudge_mins = int(os.getenv("TRACKING_NUDGE_MINUTES", "15"))
+    jq.run_repeating(tracking_nudge_job, interval=nudge_mins * 60, first=nudge_mins * 60, data=chat_id, name="tracking_nudge")
 
     # Morning digest
     morning_hour = int(os.getenv("MORNING_DIGEST_HOUR", "6"))
