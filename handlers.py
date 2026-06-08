@@ -12,6 +12,7 @@ from backlog_tools import list_backlog
 from digest import build_digest
 from formatting import SEP, bold, esc, italic
 from calendar_tools import get_event
+from tracking_tools import get_timeblock
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION
 
@@ -43,6 +44,20 @@ def _describe_call(name: str, args: dict) -> str:
         try:
             event = get_event(event_id)
             return event.get("summary") or event_id
+        except Exception:
+            return event_id
+    if name == "delete_timeblock":
+        event_id = args.get("event_id", "")
+        try:
+            from datetime import datetime
+            import tz as _tz
+            event = get_timeblock(event_id)
+            activity = event.get("summary", "?")
+            start_raw = event["start"].get("dateTime", "")
+            end_raw = event["end"].get("dateTime", "")
+            start_t = datetime.fromisoformat(start_raw).astimezone(_tz.LIMA).strftime("%H:%M")
+            end_t = datetime.fromisoformat(end_raw).astimezone(_tz.LIMA).strftime("%H:%M")
+            return f"{activity} ({start_t}–{end_t})"
         except Exception:
             return event_id
     return name
