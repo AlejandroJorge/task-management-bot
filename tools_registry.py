@@ -9,6 +9,7 @@ from backlog_tools import (
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
 from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
+from tracking_state import get_state as get_tracking_status, start_tracking, stop_tracking
 
 # Tools that require explicit user confirmation before execution
 REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item", "delete_timeblock"}
@@ -270,6 +271,40 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_tracking",
+            "description": (
+                "Start a live tracking session for an activity. "
+                "Creates an event in the Tracking calendar immediately and keeps its end time updated every 5 minutes. "
+                "Fails if a session is already active — call stop_tracking first."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activity": {"type": "string", "description": "Name of the activity to track"},
+                },
+                "required": ["activity"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "stop_tracking",
+            "description": "Stop the current live tracking session. Records the exact end time in Google Calendar.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tracking_status",
+            "description": "Return the current tracking state: LIBRE (nothing active) or ACTIVO with activity name and elapsed time in minutes.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
@@ -291,6 +326,9 @@ _SYNC_DISPATCH: dict = {
     "list_timeblocks":     list_timeblocks,
     "update_timeblock":    lambda **kw: update_timeblock(kw.pop("event_id"), **kw),
     "delete_timeblock":    delete_timeblock,
+    "start_tracking":      start_tracking,
+    "stop_tracking":       stop_tracking,
+    "get_tracking_status": get_tracking_status,
 }
 
 

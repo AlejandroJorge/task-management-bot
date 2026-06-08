@@ -7,8 +7,9 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 import auth
+import tracking_state
 from handlers import backlog, clear, handle_message, help_command, login, ls, start
-from jobs import auth_check, digest_job, event_notifier
+from jobs import auth_check, digest_job, event_notifier, tracking_persist_job, tracking_sync_job
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -47,6 +48,10 @@ def main() -> None:
     # Event notifier: checks every minute, fires at 120/90/60/50/40/30/20/10/5 min before
     jq.run_repeating(event_notifier, interval=60, first=10, data=chat_id, name="event_notifier")
 
+    # Tracking: persist state to JSON every minute, sync to Calendar every 5 min
+    jq.run_repeating(tracking_persist_job, interval=60, first=30, name="tracking_persist")
+    jq.run_repeating(tracking_sync_job, interval=300, first=60, name="tracking_sync")
+
     # Morning digest
     morning_hour = int(os.getenv("MORNING_DIGEST_HOUR", "6"))
     jq.run_daily(digest_job, time=time(morning_hour, 0), data=chat_id, name="morning_digest")
@@ -59,6 +64,9 @@ def main() -> None:
         await auth.start_callback_server()
         if auth.load_saved_token():
             logger.info("Refresh token restored from DB.")
+        state = tracking_state.load_state()
+        if state.get("status") == "ACTIVO":
+            logger.info("Tracking session restored: %s", state.get("activity"))
         await app.bot.send_message(chat_id=chat_id, text="He sido reiniciado.")
 
     async def on_shutdown(app):
