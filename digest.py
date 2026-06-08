@@ -72,30 +72,33 @@ def build_digest() -> str:
     lines.append("")
 
     # ── Tracking de hoy ───────────────────────────────────────────────────────
+    lines.append(f"⏱ {bold('Tracking hoy')}")
+    lines.append(SEP)
     try:
         live = _get_tracking_state()
         is_active = live.get("status") == "ACTIVO"
         live_event_id = live.get("event_id") if is_active else None
-        elapsed_mins = live.get("elapsed_minutes", 0) if is_active else 0
+        elapsed_mins = max(0, live.get("elapsed_minutes", 0)) if is_active else 0
 
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         blocks = list_timeblocks(day_start.isoformat(), now.isoformat())
         completed = [b for b in blocks if b["event_id"] != live_event_id]
 
-        lines.append(f"⏱ {bold('Tracking hoy')}")
-        lines.append(SEP)
-
         if is_active:
-            started = datetime.fromisoformat(live["started_at"]).astimezone(_tz.LIMA)
+            try:
+                started = datetime.fromisoformat(live["started_at"]).astimezone(_tz.LIMA)
+                since = esc(started.strftime("%H:%M"))
+            except Exception:
+                since = "?"
             h, m = divmod(elapsed_mins, 60)
             dur = f"{h}h{m:02d}m" if h else f"{m}m"
-            lines.append(f"🔴 {bold('En curso:')} {esc(live['activity'])}  desde {esc(started.strftime('%H:%M'))} _{esc(dur)}_")
+            lines.append(f"🔴 {bold('En curso:')} {esc(live['activity'])}  desde {since} _{esc(dur)}_")
 
         total_mins = elapsed_mins
         for b in completed:
             dt_s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
             dt_e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
-            mins = int((dt_e - dt_s).total_seconds() / 60)
+            mins = max(0, int((dt_e - dt_s).total_seconds() / 60))
             total_mins += mins
             h, m = divmod(mins, 60)
             dur = f"{h}h{m:02d}m" if h else f"{m}m"
@@ -108,8 +111,6 @@ def build_digest() -> str:
             total_str = f"{th}h{tm:02d}m" if th else f"{tm}m"
             lines.append(f"  {italic(f'Total: {total_str}')}")
     except Exception as exc:
-        lines.append(f"⏱ {bold('Tracking hoy')}")
-        lines.append(SEP)
         lines.append(italic(f"Error: {exc}"))
 
     lines.append("")

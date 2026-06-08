@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes
 import auth
 from calendar_tools import list_events
 from digest import build_digest
-from formatting import bold, esc, fmt_due, italic
+from formatting import bold, esc, esc_md1, fmt_due, italic
 from tasks_tools import list_tasks as _list_tasks
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,7 @@ async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:
                 else:
                     label = f"{interval} min"
                 emoji = "⏰" if suffix else "🔔"
-                text = f"{emoji} *{title}*{suffix} — en {label}"
+                text = f"{emoji} *{esc_md1(title)}*{suffix} — en {label}"
                 try:
                     await context.bot.send_message(
                         chat_id=context.job.data, text=text, parse_mode="Markdown"

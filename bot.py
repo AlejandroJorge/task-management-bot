@@ -68,12 +68,18 @@ def main() -> None:
         state = tracking_state.load_state()
         if state.get("status") == "ACTIVO":
             logger.info("Tracking session restored: %s", state.get("activity"))
-            started = datetime.fromisoformat(state["started_at"]).astimezone(_tz.LIMA)
-            restart_msg = (
-                f"He sido reiniciado. "
-                f"Sesión en curso restaurada: {state['activity']} "
-                f"(desde las {started.strftime('%H:%M')})."
-            )
+            try:
+                started = datetime.fromisoformat(state["started_at"]).astimezone(_tz.LIMA)
+                restart_msg = (
+                    f"He sido reiniciado. "
+                    f"Sesión en curso restaurada: {state['activity']} "
+                    f"(desde las {started.strftime('%H:%M')})."
+                )
+            except Exception:
+                logger.warning("Corrupt tracking state on startup (missing/invalid started_at), resetting to LIBRE")
+                tracking_state._state = {"status": "LIBRE"}
+                tracking_state.save_state()
+                restart_msg = "He sido reiniciado."
         else:
             restart_msg = "He sido reiniciado."
         await app.bot.send_message(chat_id=chat_id, text=restart_msg)

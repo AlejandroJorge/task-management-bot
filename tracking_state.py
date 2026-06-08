@@ -34,14 +34,22 @@ def save_state() -> None:
         with open(_STATE_PATH, "w") as f:
             json.dump(_state, f)
     except Exception:
-        logger.exception("Failed to save tracking state")
+        logger.warning(
+            "TRACKING STATE NOT PERSISTED — in-memory state diverges from disk. "
+            "A restart will load stale state.",
+            exc_info=True,
+        )
 
 
 def get_state() -> dict:
     state = dict(_state)
     if state.get("status") == "ACTIVO" and state.get("started_at"):
-        started = datetime.fromisoformat(state["started_at"])
-        state["elapsed_minutes"] = int((_tz.now() - started).total_seconds() / 60)
+        try:
+            started = datetime.fromisoformat(state["started_at"])
+            elapsed = max(0, int((_tz.now() - started).total_seconds() / 60))
+            state["elapsed_minutes"] = elapsed
+        except Exception:
+            state["elapsed_minutes"] = 0
     return state
 
 
@@ -57,7 +65,11 @@ def _recreate_event() -> None:
     global _state
     try:
         now = _tz.now()
-        started = datetime.fromisoformat(_state["started_at"])
+        started_raw = _state.get("started_at")
+        if not started_raw:
+            logger.warning("Cannot recreate tracking event: started_at missing from state")
+            return
+        started = datetime.fromisoformat(started_raw)
         event = _service().events().insert(
             calendarId=_get_calendar_id(_TRACKING),
             body={
@@ -76,12 +88,16 @@ def _recreate_event() -> None:
 def sync_to_calendar() -> None:
     if _state.get("status") != "ACTIVO":
         return
+    event_id = _state.get("event_id")
+    if not event_id:
+        logger.warning("sync_to_calendar: no event_id in state, skipping")
+        return
     now = _tz.now()
     try:
-        _patch_end(_state["event_id"], now.isoformat())
+        _patch_end(event_id, now.isoformat())
         logger.info("Tracking synced: %s end → %s", _state.get("activity"), now.strftime("%H:%M"))
     except Exception:
-        logger.exception("Calendar sync failed for event_id=%s, recreating", _state.get("event_id"))
+        logger.exception("Calendar sync failed for event_id=%s, recreating", event_id)
         _recreate_event()
 
 
@@ -121,7 +137,11 @@ def resume_as_live(event_id: str) -> dict:
     cal_id = _get_calendar_id(_TRACKING)
     event = svc.events().get(calendarId=cal_id, eventId=event_id).execute()
     activity = event.get("summary", "Actividad")
-    original_end = event["end"]["dateTime"]
+    if "dateTime" not in event.get("start", {}):
+        raise ValueError("Este bloque es de día completo y no tiene hora de inicio precisa.")
+    original_end = event.get("end", {}).get("dateTime")
+    if not original_end:
+        raise ValueError("El bloque no tiene hora de fin registrada.")
     now = _tz.now()
 
     items = svc.events().list(

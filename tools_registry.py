@@ -347,8 +347,8 @@ _SYNC_DISPATCH: dict = {
     "update_timeblock":    lambda **kw: update_timeblock(kw.pop("event_id"), **kw),
     "delete_timeblock":    delete_timeblock,
     "start_tracking":      start_tracking,
-    "stop_tracking":       stop_tracking,
-    "get_tracking_status": get_tracking_status,
+    "stop_tracking":       lambda **_: stop_tracking(),
+    "get_tracking_status": lambda **_: get_tracking_status(),
     "resume_as_live":      resume_as_live,
 }
 

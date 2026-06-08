@@ -16,6 +16,13 @@ def esc(text: str) -> str:
     return text
 
 
+def esc_md1(text: str) -> str:
+    """Escape Markdown v1 special characters (* _ ` [)."""
+    for ch in r"*_`[":
+        text = str(text).replace(ch, f"\\{ch}")
+    return text
+
+
 def bold(text: str) -> str:
     return f"*{esc(text)}*"
 

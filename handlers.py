@@ -43,9 +43,9 @@ def _describe_call(name: str, args: dict) -> str:
         event_id = args.get("event_id", "")
         try:
             event = get_event(event_id)
-            return event.get("summary") or event_id
+            return event.get("summary") or "(evento sin título)"
         except Exception:
-            return event_id
+            return "(evento no disponible)"
     if name == "delete_timeblock":
         event_id = args.get("event_id", "")
         try:
@@ -59,15 +59,15 @@ def _describe_call(name: str, args: dict) -> str:
             end_t = datetime.fromisoformat(end_raw).astimezone(_tz.LIMA).strftime("%H:%M")
             return f"{activity} ({start_t}–{end_t})"
         except Exception:
-            return event_id
+            return "(bloque de tiempo no disponible)"
     return name
 
 
 _histories: dict[int, list[dict]] = defaultdict(list)
 _pending: dict[int, ConfirmationRequest] = {}
 
-_YES = {"y", "yes", "si", "sí", "yep", "yeah", "sure", "ok", "confirm"}
-_NO  = {"n", "no", "nope", "cancel", "nah"}
+_YES = {"y", "yes", "si", "sí", "yep", "yeah", "sure", "ok", "confirm", "confirmar", "afirmar", "dale", "va"}
+_NO  = {"n", "no", "nope", "cancel", "nah", "cancelar", "rechazar"}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
