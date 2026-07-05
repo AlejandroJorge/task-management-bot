@@ -1,13 +1,15 @@
 """
 Inline keyboard callback routing.
 
-callback_data format: namespace:action[:arg1[:arg2]]
-  track:stop
-  track:plan:15|30|60
-  track:extend:15|30
-  track:start:ACTIVITY:CATEGORY
-  confirm:yes
-  confirm:no
+callback_data format: namespace:action[:arg...]
+  track:cat:<category>       — category selected (pending track flow)
+  track:begin:<min|open>     — start session with optional planned duration
+  track:plan:<min>           — set planned end on active session
+  track:extend:<min>         — extend planned end on active session
+  track:stop                 — stop active session
+  log:cat:<category>         — category selected (pending log flow)
+  confirm:yes / confirm:no   — destructive action confirmation
+  task:done:<doc_id>         — mark task complete
 """
 
 import logging
@@ -18,13 +20,39 @@ from telegram.ext import ContextTypes
 
 import tracking_state
 import tz as _tz
+from categories import load_categories
 from formatting import esc_md1, fmt_duration
 from tracking_tools import create_timeblock, list_timeblocks
 
 logger = logging.getLogger(__name__)
 
+# Pending state for multi-step command flows (in-memory, lost on restart — acceptable)
+_pending_track: dict[int, dict] = {}  # chat_id → {activity}
+_pending_log:   dict[int, dict] = {}  # chat_id → {activity, start, end}
 
-# ── UI builders ───────────────────────────────────────────────────────────────
+
+# ── Keyboard builders ─────────────────────────────────────────────────────────
+
+def build_category_keyboard(callback_prefix: str) -> InlineKeyboardMarkup:
+    cats = load_categories()
+    buttons = [
+        InlineKeyboardButton(v["label"], callback_data=f"{callback_prefix}:{k}")
+        for k, v in cats.items()
+    ]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(rows)
+
+
+def build_duration_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("15 min",   callback_data="track:begin:15"),
+            InlineKeyboardButton("30 min",   callback_data="track:begin:30"),
+            InlineKeyboardButton("1 hora",   callback_data="track:begin:60"),
+        ],
+        [InlineKeyboardButton("Sin límite", callback_data="track:begin:open")],
+    ])
+
 
 def build_tracking_text(state: dict) -> str:
     activity = state.get("activity", "?")
@@ -46,8 +74,6 @@ def build_tracking_text(state: dict) -> str:
                 text += "\n⚠️ Tiempo terminado — ¿extender o parar?"
         except Exception:
             pass
-    else:
-        text += "\n¿Cuánto tiempo planeas?"
     return text
 
 
@@ -88,9 +114,9 @@ def _libre_keyboard() -> InlineKeyboardMarkup | None:
         return None
     rows = []
     for name, cat in seen:
-        cb = f"track:start:{name}:{cat}"
+        cb = f"track:quickstart:{name}:{cat}"
         if len(cb.encode()) > 64:
-            cb = f"track:start:{name[:25]}:{cat}"
+            cb = f"track:quickstart:{name[:25]}:{cat}"
         rows.append([InlineKeyboardButton(name[:35], callback_data=cb)])
     return InlineKeyboardMarkup(rows)
 
@@ -100,7 +126,7 @@ def _libre_keyboard() -> InlineKeyboardMarkup | None:
 async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> None:
     """
     Send or update the persistent tracking status message.
-    notify=True  → delete old + send new (triggers push notification).
+    notify=True  → delete old + send new (push notification).
     notify=False → edit in place (silent).
     """
     state = tracking_state.get_state()
@@ -135,7 +161,7 @@ async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> 
         tracking_state.set_status_message_id(msg.message_id)
 
 
-# ── Callback handler ──────────────────────────────────────────────────────────
+# ── Main callback dispatcher ──────────────────────────────────────────────────
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -147,16 +173,71 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if ns == "track":
         await _handle_track(query, chat_id, context, parts[1:])
+    elif ns == "log":
+        await _handle_log(query, chat_id, parts[1:])
     elif ns == "confirm":
         await _handle_confirm(query, chat_id, context, parts[1] if len(parts) > 1 else "")
     elif ns == "task" and len(parts) >= 3:
         await _handle_task(query, parts[1], parts[2])
 
 
+# ── Track flow ────────────────────────────────────────────────────────────────
+
 async def _handle_track(query, chat_id, context, args: list[str]) -> None:
     action = args[0] if args else ""
 
-    if action == "stop":
+    if action == "cat":
+        # Category chosen → show duration picker
+        category = args[1] if len(args) > 1 else "unclassified"
+        pending = _pending_track.get(chat_id)
+        if not pending:
+            await query.answer("Sesión expirada, usa /track de nuevo.", show_alert=True)
+            return
+        _pending_track[chat_id] = {**pending, "category": category}
+        cat_label = load_categories().get(category, {}).get("label", category)
+        activity = pending["activity"]
+        text = f"⏱ *{esc_md1(activity)}* — {esc_md1(cat_label)}\n¿Cuánto tiempo planeas?"
+        await query.edit_message_text(text, reply_markup=build_duration_keyboard(), parse_mode="Markdown")
+
+    elif action == "begin":
+        # Duration chosen (or open-ended) → start session
+        pending = _pending_track.pop(chat_id, None)
+        if not pending:
+            await query.answer("Sesión expirada, usa /track de nuevo.", show_alert=True)
+            return
+        activity = pending["activity"]
+        category = pending.get("category", "unclassified")
+        try:
+            tracking_state.start_tracking(activity, category=category)
+        except ValueError as e:
+            await query.answer(str(e), show_alert=True)
+            return
+        minutes_arg = args[1] if len(args) > 1 else "open"
+        if minutes_arg != "open":
+            try:
+                tracking_state.set_planned_end(int(minutes_arg))
+            except Exception:
+                pass
+        state = tracking_state.get_state()
+        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
+        tracking_state.set_status_message_id(query.message.message_id)
+
+    elif action == "quickstart":
+        # One-tap restart of a recent activity (from libre widget)
+        activity = args[1] if len(args) > 1 else ""
+        category = args[2] if len(args) > 2 else "unclassified"
+        if not activity:
+            return
+        try:
+            tracking_state.start_tracking(activity, category=category)
+        except ValueError as e:
+            await query.answer(str(e), show_alert=True)
+            return
+        state = tracking_state.get_state()
+        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
+        tracking_state.set_status_message_id(query.message.message_id)
+
+    elif action == "stop":
         try:
             final = tracking_state.stop_tracking()
         except ValueError as e:
@@ -192,18 +273,36 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
         state = tracking_state.get_state()
         await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
 
-    elif action == "start" and args[1:]:
-        activity = args[1]
-        category = args[2] if len(args) > 2 else "unclassified"
-        try:
-            tracking_state.start_tracking(activity, category=category)
-        except ValueError as e:
-            await query.answer(str(e), show_alert=True)
-            return
-        state = tracking_state.get_state()
-        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
-        tracking_state.set_status_message_id(query.message.message_id)
 
+# ── Log flow ──────────────────────────────────────────────────────────────────
+
+async def _handle_log(query, chat_id, args: list[str]) -> None:
+    action = args[0] if args else ""
+
+    if action == "cat":
+        category = args[1] if len(args) > 1 else "unclassified"
+        pending = _pending_log.pop(chat_id, None)
+        if not pending:
+            await query.answer("Sesión expirada, usa /log de nuevo.", show_alert=True)
+            return
+        try:
+            create_timeblock(
+                pending["activity"],
+                pending["start"],
+                pending["end"],
+                category=category,
+            )
+        except Exception as e:
+            await query.edit_message_text(f"Error al registrar: {e}")
+            return
+        elapsed = _elapsed({"started_at": pending["start"], "ended_at": pending["end"]})
+        await query.edit_message_text(
+            f"✅ *{esc_md1(pending['activity'])}* — {fmt_duration(elapsed)} registrados.",
+            parse_mode="Markdown",
+        )
+
+
+# ── Confirm flow ──────────────────────────────────────────────────────────────
 
 async def _handle_confirm(query, chat_id, context, action: str) -> None:
     from handlers import _histories, _pending
@@ -220,10 +319,12 @@ async def _handle_confirm(query, chat_id, context, action: str) -> None:
         logger.exception("Error resuming after confirmation")
         reply = f"Error: {exc}"
     try:
-        await query.edit_message_text(reply or ("Acción cancelada." if not confirmed else "Listo."), parse_mode="Markdown")
+        await query.edit_message_text(reply or ("Cancelado." if not confirmed else "Listo."), parse_mode="Markdown")
     except Exception:
-        await query.edit_message_text(reply or ("Acción cancelada." if not confirmed else "Listo."))
+        await query.edit_message_text(reply or ("Cancelado." if not confirmed else "Listo."))
 
+
+# ── Task flow ─────────────────────────────────────────────────────────────────
 
 async def _handle_task(query, action: str, raw_id: str) -> None:
     if action == "done":
@@ -253,7 +354,7 @@ def _create_timeblock_safe(final: dict) -> None:
 def _elapsed(final: dict) -> int:
     try:
         start = datetime.fromisoformat(final["started_at"])
-        end = datetime.fromisoformat(final["ended_at"])
+        end = datetime.fromisoformat(final.get("ended_at", final.get("end", "")))
         return max(0, int((end - start).total_seconds() / 60))
     except Exception:
         return 0

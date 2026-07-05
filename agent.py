@@ -26,7 +26,6 @@ from backlog_tools import list_backlog
 from categories import categories_for_prompt
 from tasks_tools import list_tasks
 from tools_registry import REQUIRE_CONFIRMATION, TOOLS, dispatch
-from tracking_state import get_state as _get_tracking_state
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +74,9 @@ def _system_prompt() -> str:
         "Tienes acceso al Google Calendar del usuario (calendario 'Eventos'), su lista de tareas, su backlog "
         "y un calendario de registro de tiempo ('Tracking'). "
         "Las tareas son acciones inmediatas; el backlog son ideas o proyectos a largo plazo. "
-        "REGLAS DE TRACKING DE TIEMPO: "
-        "(1) create_timeblock → SOLO para registrar intervalos 100% pasados. "
-        "(2) start_tracking → arranca una sesión en vivo. Si el usuario dice 'llevo N minutos/horas haciendo X', usa started_at con la hora de inicio real. "
-        "(3) stop_tracking → termina la sesión activa y la registra en Calendar. Solo cuando el usuario diga que terminó. "
-        "(4) NUNCA llames stop_tracking para registrar un bloque pasado; usa create_timeblock. "
-        "(5) CATEGORÍAS: al llamar create_timeblock o start_tracking, SIEMPRE incluye category. Infiere la categoría más apropiada; si hay duda usa 'unclassified'. "
+        "El tracking de tiempo se maneja con los comandos /track y /log — no tienes herramientas para eso. "
+        "Si el usuario pregunta cómo registrar tiempo, indícale que use /track <actividad> para sesiones en vivo y /log <actividad> <HH:MM> <HH:MM> para bloques pasados. "
+        "Puedes consultar timeblocks pasados con list_timeblocks y editarlos o eliminarlos con update_timeblock/delete_timeblock. "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
         "REGLAS para el campo 'due' al crear o editar tareas: "
         "(1) Si el usuario NO menciona fecha ni plazo, NO incluyas 'due'. "
@@ -104,15 +100,6 @@ def _system_prompt() -> str:
     profile_ctx = _profile_context()
     if profile_ctx:
         base += "\n\n" + profile_ctx
-    try:
-        ts = _get_tracking_state()
-        if ts.get("active"):
-            ts_line = f"Tracking activo: {ts['activity']} ({ts.get('elapsed_minutes', 0)} min transcurridos)"
-            if ts.get("planned_end") and ts.get("minutes_remaining") is not None:
-                ts_line += f" — fin planificado en {ts.get('minutes_remaining')} min"
-            base += "\n\n" + ts_line
-    except Exception:
-        pass
     try:
         tasks = list_tasks(show_done=False)
         if tasks:

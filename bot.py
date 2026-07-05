@@ -10,7 +10,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 import auth
 import tracking_state
 from callbacks import handle_callback
-from handlers import backlog, clear, handle_message, help_command, login, start, status
+from handlers import backlog, clear, handle_message, help_command, log_command, login, start, status, track_command
 from jobs import auth_check, digest_job, event_notifier, tracking_nudge_job, tracking_plan_job
 
 logging.basicConfig(
@@ -41,6 +41,8 @@ def main() -> None:
     app.add_handler(CommandHandler("login",    login,        filters=me))
     app.add_handler(CommandHandler("status",   status,       filters=me))
     app.add_handler(CommandHandler("backlog",  backlog,      filters=me))
+    app.add_handler(CommandHandler("track",    track_command, filters=me))
+    app.add_handler(CommandHandler("log",      log_command,   filters=me))
 
     # ── inline button callbacks ───────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(handle_callback))

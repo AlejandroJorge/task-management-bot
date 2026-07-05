@@ -10,8 +10,7 @@ from backlog_tools import (
 )
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
-from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
-from tracking_state import start_tracking, stop_tracking
+from tracking_tools import delete_timeblock, list_timeblocks, update_timeblock
 
 REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item", "delete_timeblock"}
 
@@ -201,32 +200,6 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "create_timeblock",
-            "description": (
-                "Register a past time interval in the Tracking calendar. "
-                "Both start and end must be before the current time. "
-                "Overlapping timeblocks are rejected."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "activity": {"type": "string"},
-                    "start":    {"type": "string", "description": "ISO 8601 with offset"},
-                    "end":      {"type": "string", "description": "ISO 8601 with offset"},
-                    "notes":    {"type": "string"},
-                    "category": {
-                        "type": "string",
-                        "enum": list(load_categories().keys()),
-                        "description": "Activity category.",
-                    },
-                },
-                "required": ["activity", "start", "end", "category"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "list_timeblocks",
             "description": "Query timeblocks in the Tracking calendar between two datetimes.",
             "parameters": {
@@ -275,60 +248,9 @@ TOOLS = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "start_tracking",
-            "description": (
-                "Start a live tracking session. "
-                "Use started_at when the user says they already started a while ago. "
-                "The bot will show a widget with duration options."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "activity": {"type": "string"},
-                    "started_at": {
-                        "type": "string",
-                        "description": "Optional. ISO 8601 with offset. Use when activity already started before now.",
-                    },
-                    "category": {
-                        "type": "string",
-                        "enum": list(load_categories().keys()),
-                        "description": "Activity category.",
-                    },
-                },
-                "required": ["activity", "category"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "stop_tracking",
-            "description": "Stop the current live tracking session and log it to Google Calendar.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
-
-def _stop_and_log() -> dict:
-    from tracking_tools import create_timeblock as _create_timeblock
-    final = stop_tracking()
-    try:
-        _create_timeblock(
-            final["activity"],
-            final["started_at"],
-            final["ended_at"],
-            category=final.get("category", "unclassified"),
-        )
-    except Exception:
-        import logging as _logging
-        _logging.getLogger(__name__).warning("Failed to create timeblock on LLM stop")
-    return final
-
 
 _SYNC_DISPATCH: dict = {
     "create_event":        create_event,
@@ -346,12 +268,9 @@ _SYNC_DISPATCH: dict = {
     "list_backlog":        list_backlog,
     "update_backlog_item": lambda **kw: update_backlog_item(kw.pop("doc_id"), **kw),
     "delete_backlog_item": delete_backlog_item,
-    "create_timeblock":    create_timeblock,
     "list_timeblocks":     list_timeblocks,
     "update_timeblock":    lambda **kw: update_timeblock(kw.pop("event_id"), **kw),
     "delete_timeblock":    delete_timeblock,
-    "start_tracking":      start_tracking,
-    "stop_tracking":       lambda **_: _stop_and_log(),
 }
 
 

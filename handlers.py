@@ -1,17 +1,19 @@
 import json
 import logging
 from collections import defaultdict
+from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 import agent
 import auth
-import tracking_state
+import tz as _tz
 from agent import ConfirmationRequest
 from backlog_tools import list_backlog
+from callbacks import _pending_log, _pending_track, build_category_keyboard
 from digest import build_digest
-from formatting import SEP, bold, esc, italic
+from formatting import SEP, bold, esc, esc_md1, italic
 from calendar_tools import get_event
 from tracking_tools import get_timeblock
 from tasks_tools import list_tasks
@@ -117,6 +119,56 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
 
 
+async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    activity = " ".join(context.args) if context.args else ""
+    if not activity:
+        await update.message.reply_text("Uso: /track <actividad>")
+        return
+    chat_id = update.effective_chat.id
+    _pending_track[chat_id] = {"activity": activity}
+    await update.message.reply_text(
+        f"🏷 Categoría para *{esc_md1(activity)}*:",
+        reply_markup=build_category_keyboard("track:cat"),
+        parse_mode="Markdown",
+    )
+
+
+async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Usage: /log <actividad> <HH:MM> <HH:MM>"""
+    args = context.args or []
+    if len(args) < 3:
+        await update.message.reply_text("Uso: /log <actividad> <inicio HH:MM> <fin HH:MM>")
+        return
+    start_str, end_str = args[-2], args[-1]
+    activity = " ".join(args[:-2])
+    try:
+        today = _tz.now().date()
+        tz = _tz.LIMA
+        start_dt = datetime.strptime(start_str, "%H:%M").replace(
+            year=today.year, month=today.month, day=today.day, tzinfo=tz
+        )
+        end_dt = datetime.strptime(end_str, "%H:%M").replace(
+            year=today.year, month=today.month, day=today.day, tzinfo=tz
+        )
+    except ValueError:
+        await update.message.reply_text("Formato de hora inválido. Usa HH:MM, ej: /log Proyecto 10:00 11:30")
+        return
+    if end_dt <= start_dt:
+        await update.message.reply_text("La hora de fin debe ser posterior a la de inicio.")
+        return
+    chat_id = update.effective_chat.id
+    _pending_log[chat_id] = {
+        "activity": activity,
+        "start": start_dt.isoformat(),
+        "end": end_dt.isoformat(),
+    }
+    await update.message.reply_text(
+        f"🏷 Categoría para *{esc_md1(activity)}*:",
+        reply_markup=build_category_keyboard("log:cat"),
+        parse_mode="Markdown",
+    )
+
+
 async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     items = list_backlog()
     if not items:
@@ -150,18 +202,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     logger.info("Message from %s: %s", chat_id, text[:80])
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    state_before = tracking_state.get_state()
-
     try:
         result = await agent.process(text, _histories[chat_id])
     except Exception as exc:
         logger.exception("Agent error for message: %s", text[:80])
         await update.message.reply_text(f"Error: {exc}")
         return
-
-    state_after = tracking_state.get_state()
-    tracking_started = not state_before.get("active") and state_after.get("active")
-    tracking_stopped = state_before.get("active") and not state_after.get("active")
 
     if isinstance(result, ConfirmationRequest):
         _pending[chat_id] = result
@@ -177,24 +223,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await _reply(update.message, "\n".join(lines), parse_mode="MarkdownV2", reply_markup=keyboard)
         return
 
-    # If tracking just started, use the status widget as the reply (skip LLM text)
-    if tracking_started:
-        from callbacks import build_tracking_keyboard, build_tracking_text
-        state = tracking_state.get_state()
-        msg = await update.message.reply_text(
-            build_tracking_text(state),
-            reply_markup=build_tracking_keyboard(state),
-            parse_mode="Markdown",
-        )
-        tracking_state.set_status_message_id(msg.message_id)
-        return
-
     await _reply(update.message, result)
-
-    # If tracking just stopped via LLM, silently update the status message
-    if tracking_stopped:
-        from callbacks import send_tracking_status
-        await send_tracking_status(context.bot, chat_id, notify=False)
 
     if len(_histories[chat_id]) > 40:
         await context.bot.send_message(
