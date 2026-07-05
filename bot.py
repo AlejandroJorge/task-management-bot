@@ -16,7 +16,7 @@ from handlers import (
     idea_command, log_command, login, start, status, task_command, tasks_command,
     track_command,
 )
-from jobs import auth_check, digest_job, event_notifier, tracking_minutely_job, tracking_nudge_job
+from jobs import auth_check, daily_summary_job, event_notifier, tracking_minutely_job, tracking_nudge_job
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    _required = ["BOT_TOKEN", "ALLOWED_USER_ID", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+    _required = ["BOT_TOKEN", "ALLOWED_USER_ID", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "DEEPSEEK_API_KEY"]
     if missing := [v for v in _required if not os.getenv(v)]:
         sys.exit(f"Missing required env vars: {', '.join(missing)}")
 
@@ -77,11 +77,10 @@ def main() -> None:
     # Active session: silent minutely refresh; notifies only at 5-min warning and time-up
     jq.run_repeating(tracking_minutely_job, interval=60, first=60, data=chat_id, name="tracking_minutely")
 
-    morning_hour = int(os.getenv("MORNING_DIGEST_HOUR", "6"))
-    jq.run_daily(digest_job, time=time(morning_hour, 0), data=chat_id, name="morning_digest")
-
-    evening_hour = int(os.getenv("EVENING_DIGEST_HOUR", "20"))
-    jq.run_daily(digest_job, time=time(evening_hour, 0), data=chat_id, name="evening_digest")
+    # Daily 8pm summary of the last 24h of tracking. tzinfo is mandatory here:
+    # the job queue scheduler defaults to UTC, so a naive time runs 5h early.
+    summary_hour = int(os.getenv("DAILY_SUMMARY_HOUR", "20"))
+    jq.run_daily(daily_summary_job, time=time(summary_hour, 0, tzinfo=_tz.LIMA), data=chat_id, name="daily_summary")
 
     async def on_startup(app):
         await auth.start_callback_server()

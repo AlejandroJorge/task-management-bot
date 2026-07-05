@@ -8,7 +8,6 @@ from telegram.ext import ContextTypes
 
 import auth
 from calendar_tools import list_events
-from digest import build_digest
 from tasks_tools import list_tasks as _list_tasks
 
 logger = logging.getLogger(__name__)
@@ -34,8 +33,16 @@ async def auth_check(context: ContextTypes.DEFAULT_TYPE) -> None:
         _last_auth_reminder = now
 
 
-async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    await context.bot.send_message(chat_id=context.job.data, text=build_digest(), parse_mode="MarkdownV2")
+async def daily_summary_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """8pm daily: DeepSeek narrates the last 24h of tracking (plain text)."""
+    import asyncio
+    from summary import build_daily_summary
+    try:
+        text = await asyncio.to_thread(build_daily_summary)
+    except Exception as e:
+        logger.exception("Daily summary failed")
+        text = f"No pude generar el resumen de hoy: {e}"
+    await context.bot.send_message(chat_id=context.job.data, text=text)
 
 
 async def tracking_nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:
