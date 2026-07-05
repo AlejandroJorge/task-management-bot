@@ -78,12 +78,11 @@ def build_digest() -> str:
     try:
         live = _get_tracking_state()
         is_active = live.get("active", False)
-        live_event_id = live.get("event_id") if is_active else None
         elapsed_mins = max(0, live.get("elapsed_minutes", 0)) if is_active else 0
 
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         blocks = list_timeblocks(day_start.isoformat(), now.isoformat())
-        completed = [b for b in blocks if b["event_id"] != live_event_id]
+        completed = blocks  # all Calendar blocks are finalized; live session is in-memory only
 
         # Build unified chronological list: (start_dt, end_dt|None, activity, mins, is_live)
         entries = []
