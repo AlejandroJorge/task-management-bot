@@ -39,29 +39,38 @@ async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def tracking_nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fires every TRACKING_NUDGE_MINUTES. Deletes previous status message and sends a fresh one."""
+    """Fires every TRACKING_NUDGE_MINUTES. Re-sends '¿Qué estás haciendo?' (with
+    notification) only when idle; active sessions are refreshed silently by
+    tracking_minutely_job."""
+    import tracking_state
     from callbacks import send_tracking_status
+    if tracking_state.get_state().get("active"):
+        return
     await send_tracking_status(context.bot, context.job.data, notify=True)
 
 
-async def tracking_plan_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Fires every minute. Sends planned-end warnings when time is running out."""
+async def tracking_minutely_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Fires every minute while a session is active: silently edits the status
+    message so elapsed/remaining stay current. Only notifies (delete + resend)
+    at the 5-min warning and at time-up."""
     import tracking_state
     from callbacks import send_tracking_status
 
     state = tracking_state.get_state()
-    if not state.get("active") or not state.get("planned_end"):
+    if not state.get("active"):
         return
 
-    mins_rem = state.get("minutes_remaining", 999)
+    notify = False
+    if state.get("planned_end"):
+        mins_rem = state.get("minutes_remaining", 999)
+        if not state.get("plan_warned") and 0 < mins_rem <= 5:
+            tracking_state.mark_plan_warned()
+            notify = True
+        elif not state.get("plan_ended") and mins_rem <= 0:
+            tracking_state.mark_plan_ended()
+            notify = True
 
-    if not tracking_state._state.get("plan_warned") and 0 < mins_rem <= 5:
-        tracking_state.mark_plan_warned()
-        await send_tracking_status(context.bot, context.job.data, notify=True)
-
-    elif not tracking_state._state.get("plan_ended") and mins_rem <= 0:
-        tracking_state.mark_plan_ended()
-        await send_tracking_status(context.bot, context.job.data, notify=True)
+    await send_tracking_status(context.bot, context.job.data, notify=notify)
 
 
 async def event_notifier(context: ContextTypes.DEFAULT_TYPE) -> None:

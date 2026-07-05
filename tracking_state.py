@@ -115,6 +115,15 @@ def set_planned_end(minutes: int) -> None:
     logger.info("Planned end set: %d min → %s", minutes, planned_end.strftime("%H:%M"))
 
 
+def set_category(category: str) -> None:
+    global _state
+    if not _state.get("active"):
+        raise ValueError("No hay sesión activa.")
+    _state["category"] = category
+    save_state()
+    logger.info("Category set: %s", category)
+
+
 def set_status_message_id(mid: int | None) -> None:
     global _state
     _state["status_message_id"] = mid

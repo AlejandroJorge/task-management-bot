@@ -7,6 +7,8 @@ callback_data format: namespace:action[:arg...]
   track:plan:<min>           — set planned end on active session
   track:extend:<min>         — extend planned end on active session
   track:stop                 — stop active session
+  track:recat                — show category picker on active session
+  track:setcat:<category>    — set category on active session
   log:cat:<category>         — category selected (pending log flow)
   deltask:yes:<doc_id> / deltask:no — task deletion confirmation
   delidea:yes:<doc_id> / delidea:no — backlog deletion confirmation
@@ -22,7 +24,7 @@ import tracking_state
 import tz as _tz
 from categories import load_categories
 from formatting import esc_md1, fmt_duration
-from tracking_tools import create_timeblock, list_timeblocks
+from tracking_tools import create_timeblock
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,10 @@ def build_tracking_text(state: dict) -> str:
         desde = "?"
     dur = fmt_duration(elapsed)
     text = f"⏱ *{esc_md1(activity)}* — desde las {desde} ({dur})"
+    category = state.get("category", "unclassified")
+    if category != "unclassified":
+        label = load_categories().get(category, {}).get("label", category)
+        text += f"\n🏷 {esc_md1(label)}"
     if state.get("planned_end"):
         try:
             end_dt = datetime.fromisoformat(state["planned_end"]).astimezone(_tz.LIMA)
@@ -79,45 +85,22 @@ def build_tracking_text(state: dict) -> str:
 
 def build_tracking_keyboard(state: dict) -> InlineKeyboardMarkup:
     if state.get("planned_end"):
-        return InlineKeyboardMarkup([[
+        rows = [[
             InlineKeyboardButton("+15 min", callback_data="track:extend:15"),
             InlineKeyboardButton("+30 min", callback_data="track:extend:30"),
             InlineKeyboardButton("⏹ Parar", callback_data="track:stop"),
-        ]])
-    return InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("15 min", callback_data="track:plan:15"),
-            InlineKeyboardButton("30 min", callback_data="track:plan:30"),
-            InlineKeyboardButton("1 hora", callback_data="track:plan:60"),
-        ],
-        [InlineKeyboardButton("⏹ Parar", callback_data="track:stop")],
-    ])
-
-
-def _libre_keyboard() -> InlineKeyboardMarkup | None:
-    try:
-        now = _tz.now()
-        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        blocks = list_timeblocks(day_start.isoformat(), now.isoformat())
-        seen: list[tuple[str, str]] = []
-        seen_names: set[str] = set()
-        for b in reversed(blocks):
-            name = b["activity"]
-            if name not in seen_names:
-                seen_names.add(name)
-                seen.append((name, b.get("category", "unclassified")))
-            if len(seen) >= 3:
-                break
-    except Exception:
-        seen = []
-    if not seen:
-        return None
-    rows = []
-    for name, cat in seen:
-        cb = f"track:quickstart:{name}:{cat}"
-        if len(cb.encode()) > 64:
-            cb = f"track:quickstart:{name[:25]}:{cat}"
-        rows.append([InlineKeyboardButton(name[:35], callback_data=cb)])
+        ]]
+    else:
+        rows = [
+            [
+                InlineKeyboardButton("15 min", callback_data="track:plan:15"),
+                InlineKeyboardButton("30 min", callback_data="track:plan:30"),
+                InlineKeyboardButton("1 hora", callback_data="track:plan:60"),
+            ],
+            [InlineKeyboardButton("⏹ Parar", callback_data="track:stop")],
+        ]
+    if state.get("category", "unclassified") == "unclassified":
+        rows.append([InlineKeyboardButton("🏷 Categoría", callback_data="track:recat")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -137,7 +120,7 @@ async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> 
         keyboard = build_tracking_keyboard(state)
     else:
         text = "¿Qué estás haciendo?"
-        keyboard = _libre_keyboard()
+        keyboard = None
 
     if msg_id:
         try:
@@ -149,8 +132,10 @@ async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> 
                     text=text, reply_markup=keyboard, parse_mode="Markdown",
                 )
                 return
-        except Exception:
-            pass
+        except Exception as e:
+            # Unchanged text is fine — don't fall through to a (notifying) resend
+            if "not modified" in str(e).lower():
+                return
     msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown")
     tracking_state.set_status_message_id(msg.message_id)
 
@@ -223,19 +208,6 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
                 pass
         await _show_active_session(query)
 
-    elif action == "quickstart":
-        # One-tap restart of a recent activity (from libre widget)
-        activity = args[1] if len(args) > 1 else ""
-        category = args[2] if len(args) > 2 else "unclassified"
-        if not activity:
-            return
-        try:
-            tracking_state.start_tracking(activity, category=category)
-        except ValueError as e:
-            await query.answer(str(e), show_alert=True)
-            return
-        await _show_active_session(query)
-
     elif action == "stop":
         try:
             final = tracking_state.stop_tracking()
@@ -246,13 +218,24 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
         elapsed = _elapsed(final)
         activity = final.get("activity", "?")
         done_text = f"✅ *{esc_md1(activity)}* — {fmt_duration(elapsed)} registrados\n\n¿Qué estás haciendo?"
-        keyboard = _libre_keyboard()
         try:
-            await query.edit_message_text(done_text, reply_markup=keyboard, parse_mode="Markdown")
+            await query.edit_message_text(done_text, parse_mode="Markdown")
             tracking_state.set_status_message_id(query.message.message_id)
         except Exception:
-            msg = await context.bot.send_message(chat_id=chat_id, text=done_text, reply_markup=keyboard, parse_mode="Markdown")
+            msg = await context.bot.send_message(chat_id=chat_id, text=done_text, parse_mode="Markdown")
             tracking_state.set_status_message_id(msg.message_id)
+
+    elif action == "recat":
+        # Swap the keyboard for the category picker; text stays as-is
+        await query.edit_message_reply_markup(reply_markup=build_category_keyboard("track:setcat"))
+
+    elif action == "setcat" and args[1:]:
+        try:
+            tracking_state.set_category(args[1])
+        except ValueError as e:
+            await query.answer(str(e), show_alert=True)
+            return
+        await _show_active_session(query)
 
     elif action in ("plan", "extend") and args[1:]:
         # Both set planned_end to now + minutes; only the button label differs.

@@ -30,14 +30,11 @@ def italic(text: str) -> str:
     return f"_{esc(text)}_"
 
 
-# Spanish date helpers — avoids locale dependency
 _DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-_DIAS_CORTOS = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
 _MESES = [
     "enero", "febrero", "marzo", "abril", "mayo", "junio",
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ]
-_MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 
 
 def fecha_es(dt) -> str:
@@ -59,7 +56,6 @@ def fmt_due(due_str: str) -> str:
         has_time = "T" in due_str or (" " in due_str.strip() and ":" in due_str)
         if has_time:
             dt_utc = datetime.fromisoformat(due_str.replace("Z", "+00:00"))
-            # Midnight UTC means the LLM used a date-only intent — show date only
             if dt_utc.hour == 0 and dt_utc.minute == 0 and dt_utc.second == 0:
                 mes = _MESES[dt_utc.month - 1]
                 return f"{dt_utc.day} de {mes}"

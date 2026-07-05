@@ -9,7 +9,7 @@ import tz as _tz
 from backlog_tools import create_backlog_item, list_backlog
 from calendar_tools import list_events
 from digest import build_digest
-from formatting import SEP, bold, esc, esc_md1, fmt_due, italic
+from formatting import SEP, bold, esc, esc_md1, fmt_due, fmt_duration, italic
 from tasks_tools import create_task, list_tasks, update_task
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "*Calendario*\n"
         "/events — próximos eventos\n\n"
         "*Tracking*\n"
-        "/track <actividad> — iniciar sesión de trabajo\n"
+        "Escribe cualquier texto — iniciar (o cambiar de) actividad al instante\n"
+        "/track <actividad> — iniciar sesión eligiendo categoría y duración\n"
         "/log <actividad> <inicio HH:MM> <fin HH:MM> — registrar bloque pasado\n\n"
         "*General*\n"
         "/status — resumen del día\n"
@@ -253,4 +254,25 @@ async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("No entiendo ese mensaje. Usa /help para ver los comandos disponibles.")
+    """Free text is an activity name: start tracking it immediately (open-ended,
+    unclassified). If a session is already active, log it first and switch."""
+    import tracking_state
+    from callbacks import _create_timeblock_safe, _elapsed, send_tracking_status
+
+    activity = (update.message.text or "").strip()
+    if not activity:
+        return
+    chat_id = update.effective_chat.id
+
+    state = tracking_state.get_state()
+    if state.get("active"):
+        if activity == state.get("activity"):
+            await send_tracking_status(context.bot, chat_id, notify=True)
+            return
+        final = tracking_state.stop_tracking()
+        _create_timeblock_safe(final)
+        await update.message.reply_text(
+            f"✅ {final.get('activity', '?')} — {fmt_duration(_elapsed(final))} registrados."
+        )
+    tracking_state.start_tracking(activity)
+    await send_tracking_status(context.bot, chat_id, notify=True)

@@ -15,7 +15,7 @@ from handlers import (
     events_command, handle_message, help_command, idea_command, log_command,
     login, start, status, task_command, tasks_command, track_command,
 )
-from jobs import auth_check, digest_job, event_notifier, tracking_nudge_job, tracking_plan_job
+from jobs import auth_check, digest_job, event_notifier, tracking_minutely_job, tracking_nudge_job
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -66,12 +66,12 @@ def main() -> None:
     jq.run_repeating(auth_check, interval=600, first=15, data=chat_id, name="auth_check")
     jq.run_repeating(event_notifier, interval=60, first=10, data=chat_id, name="event_notifier")
 
-    # Nudge: delete + resend status message on interval (push notification)
+    # Idle nudge: delete + resend "¿Qué estás haciendo?" on interval (push notification)
     nudge_mins = int(os.getenv("TRACKING_NUDGE_MINUTES", "15"))
     jq.run_repeating(tracking_nudge_job, interval=nudge_mins * 60, first=nudge_mins * 60, data=chat_id, name="tracking_nudge")
 
-    # Planned-end watcher: fires every minute, only acts at 5 min warning and time-up
-    jq.run_repeating(tracking_plan_job, interval=60, first=60, data=chat_id, name="tracking_plan")
+    # Active session: silent minutely refresh; notifies only at 5-min warning and time-up
+    jq.run_repeating(tracking_minutely_job, interval=60, first=60, data=chat_id, name="tracking_minutely")
 
     morning_hour = int(os.getenv("MORNING_DIGEST_HOUR", "6"))
     jq.run_daily(digest_job, time=time(morning_hour, 0), data=chat_id, name="morning_digest")

@@ -5,8 +5,8 @@ import tz as _tz
 from calendar_tools import list_events
 from formatting import (
     SEP,
-    _DIAS_CORTOS,
-    _MESES_CORTOS,
+    _DIAS,
+    _MESES,
     bold,
     esc,
     fecha_es,
@@ -29,15 +29,16 @@ def _fmt_event_time(start_raw: str, end_raw: str = "") -> str:
             time_str += f"–{dt_end.strftime('%H:%M')}"
         if dt_start.date() == today:
             return time_str
-        mes = _MESES_CORTOS[dt_start.month - 1]
-        dia = _DIAS_CORTOS[dt_start.weekday()]
+        # First 3 chars of the Spanish names are the standard abbreviations (lun, mié, sep…)
+        mes = _MESES[dt_start.month - 1][:3]
+        dia = _DIAS[dt_start.weekday()][:3]
         return f"{dia} {dt_start.day} {mes}, {time_str}"
     else:
         d = date.fromisoformat(start_raw[:10])
         if d == today:
             return "Todo el día"
-        mes = _MESES_CORTOS[d.month - 1]
-        dia = _DIAS_CORTOS[d.weekday()]
+        mes = _MESES[d.month - 1][:3]
+        dia = _DIAS[d.weekday()][:3]
         return f"{dia} {d.day} {mes}"
 
 
