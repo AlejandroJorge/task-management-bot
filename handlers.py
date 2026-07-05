@@ -208,7 +208,7 @@ async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Exception:
             when = start_str
         lines.append(f"{i}\\. {bold(summary)} — {esc(when)}")
-    lines += ["", italic("Usa /event para crear o /delevent \\<n\\> para eliminar")]
+    lines += ["", italic("Usa /event para crear o /delevent <n> para eliminar")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 

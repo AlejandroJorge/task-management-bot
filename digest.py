@@ -53,7 +53,7 @@ def build_digest() -> str:
     else:
         try:
             time_min = now.isoformat()
-            time_max = (now + timedelta(days=3)).isoformat()
+            time_max = (now + timedelta(days=5)).isoformat()
             events = list_events(max_results=7, time_min=time_min, time_max=time_max)
             lines.append(f"📅 {bold('Próximos eventos')}")
             lines.append(SEP)
