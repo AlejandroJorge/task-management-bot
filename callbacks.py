@@ -12,6 +12,7 @@ callback_data format: namespace:action[:arg...]
   track:refresh              — re-render the status message
   deltask:yes:<doc_id> / deltask:no — task deletion confirmation
   delidea:yes:<doc_id> / delidea:no — backlog deletion confirmation
+  delevent:yes:<event_id> / delevent:no — calendar event deletion confirmation
 """
 
 import logging
@@ -163,10 +164,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _handle_track(query, chat_id, context, parts[1:])
     elif ns == "deltask":
         from tasks_tools import delete_task
-        await _handle_delete(query, parts[1:], delete_task, "Tarea eliminada")
+        await _handle_delete(query, parts[1:], lambda i: delete_task(int(i)), "Tarea eliminada")
     elif ns == "delidea":
         from backlog_tools import delete_backlog_item
-        await _handle_delete(query, parts[1:], delete_backlog_item, "Idea eliminada")
+        await _handle_delete(query, parts[1:], lambda i: delete_backlog_item(int(i)), "Idea eliminada")
+    elif ns == "delevent":
+        from calendar_tools import delete_event
+        await _handle_delete(query, parts[1:], delete_event, "Evento eliminado")
 
 
 # ── Track flow ────────────────────────────────────────────────────────────────
@@ -263,7 +267,7 @@ async def _handle_delete(query, args: list[str], delete_fn, ok_text: str) -> Non
         return
     if action == "yes" and len(args) > 1:
         try:
-            delete_fn(int(args[1]))
+            delete_fn(args[1])
             await query.edit_message_text(f"✅ {ok_text}.")
         except Exception as e:
             await query.edit_message_text(f"Error: {e}")

@@ -7,7 +7,7 @@ from telegram.ext import ContextTypes
 import auth
 import tz as _tz
 from backlog_tools import create_backlog_item, list_backlog, set_backlog_step
-from calendar_tools import list_events
+from calendar_tools import create_event, list_events
 from digest import build_digest
 from formatting import SEP, bold, esc, esc_md1, fmt_due, fmt_duration, italic
 from tasks_tools import create_task, list_tasks, update_task
@@ -29,7 +29,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "*Comandos disponibles*\n\n"
         "*Tareas*\n"
         "/tasks — listar tareas pendientes\n"
-        "/task <título> — crear tarea\n"
+        "/task <título> | <primer paso> — crear tarea (paso opcional)\n"
+        "/taskstep <n> <primer paso> — fijar el primer paso de una tarea\n"
         "/done <n> — marcar tarea como completada\n"
         "/deltask <n> — eliminar tarea\n\n"
         "*Backlog*\n"
@@ -38,7 +39,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/step <n> <primer paso> — fijar el primer paso accionable de una idea\n"
         "/delidea <n> — eliminar idea del backlog\n\n"
         "*Calendario*\n"
-        "/events — próximos eventos\n\n"
+        "/events — próximos eventos\n"
+        "/event <título> | <inicio> | <fin> — crear evento (DD/MM HH:MM)\n"
+        "/delevent <n> — eliminar evento\n\n"
         "*Tracking*\n"
         "Responde al mensaje de tracking — iniciar (o cambiar de) actividad al instante\n"
         "/track <actividad> — iniciar sesión eligiendo duración\n"
@@ -97,17 +100,36 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         lines.append(f"{i}\\. {bold(t['title'])}{due_part}")
         if t.get("notes"):
             lines.append(f"  {italic(t['notes'])}")
-    lines += ["", italic("Usa /done \\<n\\> o /deltask \\<n\\>")]
+        if t.get("first_step"):
+            lines.append(f"  ▸ {esc(t['first_step'])}")
+    lines += ["", italic("Usa /done \\<n\\>, /deltask \\<n\\> o /taskstep \\<n\\> \\<primer paso\\>")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
 async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    title = " ".join(context.args) if context.args else ""
-    if not title:
-        await update.message.reply_text("Uso: /task <título>")
+    text = " ".join(context.args) if context.args else ""
+    if not text:
+        await update.message.reply_text("Uso: /task <título>  (o /task <título> | <primer paso>)")
         return
-    create_task(title)
-    await update.message.reply_text(f"✅ Tarea creada: {title}")
+    title, step = (text.split(" | ", 1) + [""])[:2]
+    create_task(title.strip(), first_step=step.strip())
+    reply = f"✅ Tarea creada: {title.strip()}"
+    if step.strip():
+        reply += f"\n▸ Primer paso: {step.strip()}"
+    await update.message.reply_text(reply)
+
+
+async def taskstep_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text("Uso: /taskstep <n> <primer paso>  (número según /tasks)")
+        return
+    task = await _pick_numbered(update, args[0], list_tasks(show_done=False), "/tasks")
+    if task is None:
+        return
+    step = " ".join(args[1:])
+    update_task(task["doc_id"], first_step=step)
+    await update.message.reply_text(f"▸ Primer paso para «{task['title']}»: {step}")
 
 
 async def _pick_numbered(update: Update, arg: str, items: list[dict], list_cmd: str) -> dict | None:
@@ -164,15 +186,15 @@ async def deltask_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        evs = list_events(max_results=5)
+        evs = list_events(max_results=10)
     except Exception as e:
         await update.message.reply_text(f"Error al obtener eventos: {e}")
         return
     if not evs:
         await update.message.reply_text("No hay próximos eventos.")
         return
-    lines = [f"📅 {bold('Próximos eventos')}", SEP, ""]
-    for ev in evs:
+    lines = [f"📅 {bold(f'Próximos eventos ({len(evs)})')}", SEP, ""]
+    for i, ev in enumerate(evs, 1):
         summary = ev.get("summary", "(sin título)")
         start = ev.get("start", {})
         start_str = start.get("dateTime") or start.get("date", "")
@@ -185,8 +207,84 @@ async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 when = d.strftime("%d/%m")
         except Exception:
             when = start_str
-        lines.append(f"• {bold(summary)} — {esc(when)}")
+        lines.append(f"{i}\\. {bold(summary)} — {esc(when)}")
+    lines += ["", italic("Usa /event para crear o /delevent \\<n\\> para eliminar")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+
+
+def _parse_event_datetime(s: str, base_date: date | None = None) -> datetime:
+    """Parse 'DD/MM HH:MM' or 'HH:MM' (relative to base_date/today) as a Lima
+    datetime. Dates without a year that already passed roll to next year.
+    Raises ValueError with a user-facing message."""
+    s = s.strip()
+    today = _tz.now().date()
+    try:
+        if " " in s:
+            date_part, time_part = s.split()
+            day_s, month_s = date_part.split("/")
+            d = date(today.year, int(month_s), int(day_s))
+            if d < today:
+                d = d.replace(year=today.year + 1)
+        else:
+            time_part = s
+            d = base_date or today
+        t = datetime.strptime(time_part, "%H:%M").time()
+    except (ValueError, TypeError):
+        raise ValueError("Formato inválido. Usa DD/MM HH:MM (u HH:MM para hoy), ej: 12/07 15:00")
+    return datetime.combine(d, t, tzinfo=_tz.LIMA)
+
+
+async def event_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = " ".join(context.args) if context.args else ""
+    parts = [p.strip() for p in text.split(" | ")]
+    if len(parts) != 3 or not all(parts):
+        await update.message.reply_text(
+            "Uso: /event <título> | <inicio> | <fin>\n"
+            "Fechas: DD/MM HH:MM, o solo HH:MM para hoy. El fin puede ser solo HH:MM (mismo día).\n"
+            "Ej: /event Dentista | 12/07 15:00 | 16:00"
+        )
+        return
+    title, start_s, end_s = parts
+    try:
+        start_dt = _parse_event_datetime(start_s)
+        end_dt = _parse_event_datetime(end_s, base_date=start_dt.date())
+        if end_dt <= start_dt:
+            raise ValueError("La hora de fin debe ser posterior a la de inicio.")
+    except ValueError as e:
+        await update.message.reply_text(str(e))
+        return
+    try:
+        create_event(title, start_dt.isoformat(), end_dt.isoformat())
+    except Exception as e:
+        await update.message.reply_text(f"Error al crear el evento: {e}")
+        return
+    await update.message.reply_text(
+        f"📅 Evento creado: {title}\n"
+        f"{start_dt.strftime('%d/%m %H:%M')}–{end_dt.strftime('%H:%M' if end_dt.date() == start_dt.date() else '%d/%m %H:%M')}"
+    )
+
+
+async def delevent_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Uso: /delevent <n>  (número según /events)")
+        return
+    try:
+        evs = list_events(max_results=10)
+    except Exception as e:
+        await update.message.reply_text(f"Error al obtener eventos: {e}")
+        return
+    ev = await _pick_numbered(update, context.args[0], evs, "/events")
+    if ev is None:
+        return
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Eliminar", callback_data=f"delevent:yes:{ev['id']}"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="delevent:no"),
+    ]])
+    await update.message.reply_text(
+        f"🗑 Eliminar evento *{esc_md1(ev.get('summary', '(sin título)'))}*?",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
 
 
 async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

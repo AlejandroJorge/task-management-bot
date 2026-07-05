@@ -5,8 +5,10 @@ from db_utils import db_insert, db_list, db_remove, db_update
 DB_PATH = os.getenv("TASKS_DB_PATH", "data/tasks.json")
 
 
-def create_task(title: str, notes: str = "", due: str | None = None) -> int:
-    return db_insert(DB_PATH, {"title": title, "notes": notes, "due": due, "done": False})
+def create_task(title: str, notes: str = "", due: str | None = None, first_step: str = "") -> int:
+    return db_insert(DB_PATH, {
+        "title": title, "notes": notes, "due": due, "done": False, "first_step": first_step,
+    })
 
 
 def list_tasks(show_done: bool = False) -> list[dict]:
@@ -18,7 +20,7 @@ def list_tasks(show_done: bool = False) -> list[dict]:
 
 
 def update_task(doc_id: int, **fields) -> None:
-    allowed = {k: fields[k] for k in ("title", "notes", "due", "done") if k in fields}
+    allowed = {k: fields[k] for k in ("title", "notes", "due", "done", "first_step") if k in fields}
     db_update(DB_PATH, doc_id, allowed)
 
 

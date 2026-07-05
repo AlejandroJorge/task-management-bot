@@ -11,10 +11,10 @@ import auth
 import tracking_state
 from callbacks import handle_callback
 from handlers import (
-    backlog, blocks_command, delblock_command, delidea_command, deltask_command,
-    done_command, editblock_command, events_command, handle_message, help_command,
-    idea_command, log_command, login, start, status, step_command, task_command,
-    tasks_command, track_command,
+    backlog, blocks_command, delblock_command, delevent_command, delidea_command,
+    deltask_command, done_command, editblock_command, event_command, events_command,
+    handle_message, help_command, idea_command, log_command, login, start, status,
+    step_command, task_command, tasks_command, taskstep_command, track_command,
 )
 from jobs import auth_check, daily_summary_job, event_notifier, tracking_minutely_job, tracking_nudge_job
 
@@ -48,7 +48,10 @@ def main() -> None:
     app.add_handler(CommandHandler("task",     task_command,    filters=me))
     app.add_handler(CommandHandler("done",     done_command,    filters=me))
     app.add_handler(CommandHandler("deltask",  deltask_command, filters=me))
+    app.add_handler(CommandHandler("taskstep", taskstep_command, filters=me))
     app.add_handler(CommandHandler("events",   events_command,  filters=me))
+    app.add_handler(CommandHandler("event",    event_command,   filters=me))
+    app.add_handler(CommandHandler("delevent", delevent_command, filters=me))
     app.add_handler(CommandHandler("backlog",  backlog,         filters=me))
     app.add_handler(CommandHandler("idea",     idea_command,    filters=me))
     app.add_handler(CommandHandler("step",     step_command,    filters=me))

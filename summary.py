@@ -44,4 +44,7 @@ def build_daily_summary() -> str:
             {"role": "user", "content": "Bloques registrados:\n" + "\n".join(lines)},
         ],
     )
-    return resp.choices[0].message.content.strip()
+    text = resp.choices[0].message.content.strip()
+    # The model sometimes emits the two characters "\n" instead of a real
+    # newline; Telegram then shows them literally.
+    return text.replace("\\n", "\n")

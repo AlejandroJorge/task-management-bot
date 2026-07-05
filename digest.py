@@ -126,6 +126,8 @@ def build_digest() -> str:
             lines.append(f"• {esc(t['title'])}{due}")
             if t.get("notes"):
                 lines.append(f"  {italic(t['notes'])}")
+            if t.get("first_step"):
+                lines.append(f"  ▸ {esc(t['first_step'])}")
     else:
         lines.append(italic("Sin tareas pendientes"))
 
