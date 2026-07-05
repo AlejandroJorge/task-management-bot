@@ -60,7 +60,7 @@ def get_state() -> dict:
     return state
 
 
-def start_tracking(activity: str, category: str = "unclassified", started_at: str | None = None) -> dict:
+def start_tracking(activity: str, started_at: str | None = None) -> dict:
     global _state
     if _state.get("active"):
         raise ValueError(f"Ya estás trackeando '{_state['activity']}'. Detén la sesión primero.")
@@ -80,14 +80,13 @@ def start_tracking(activity: str, category: str = "unclassified", started_at: st
         "active": True,
         "activity": activity,
         "started_at": event_start.isoformat(),
-        "category": category,
         "planned_end": None,
         "plan_warned": False,
         "plan_ended": False,
         "status_message_id": _state.get("status_message_id"),
     }
     save_state()
-    logger.info("Tracking started: %s (category=%s)", activity, category)
+    logger.info("Tracking started: %s", activity)
     return get_state()
 
 
@@ -137,15 +136,6 @@ def backdate_start(minutes: int) -> tuple[str, str]:
     save_state()
     logger.info("Start backdated %d min: %s → %s", minutes, old_start, new_start)
     return old_start, new_start
-
-
-def set_category(category: str) -> None:
-    global _state
-    if not _state.get("active"):
-        raise ValueError("No hay sesión activa.")
-    _state["category"] = category
-    save_state()
-    logger.info("Category set: %s", category)
 
 
 def set_status_message_id(mid: int | None) -> None:

@@ -3,7 +3,6 @@ from datetime import datetime
 
 import tz as _tz
 from calendar_tools import _TRACKING, _get_calendar_id, _service
-from categories import color_id_for
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +36,7 @@ def _check_collision(start: str, end: str, exclude_id: str | None = None) -> Non
         raise ValueError(f"Conflicto con bloque existente: {names}")
 
 
-def create_timeblock(activity: str, start: str, end: str, notes: str = "", category: str = "unclassified") -> dict:
+def create_timeblock(activity: str, start: str, end: str, notes: str = "") -> dict:
     dt_start = _assert_past(start, "Inicio")
     dt_end = _assert_past(end, "Fin")
     if dt_start >= dt_end:
@@ -48,12 +47,10 @@ def create_timeblock(activity: str, start: str, end: str, notes: str = "", categ
         "description": notes,
         "start": {"dateTime": start},
         "end": {"dateTime": end},
-        "colorId": color_id_for(category) or "3",
-        "extendedProperties": {"private": {"category": category}},
     }
     result = _service().events().insert(calendarId=_get_calendar_id(_TRACKING), body=body).execute()
-    logger.info("Timeblock created: %s [%s – %s] category=%s", activity, start, end, category)
-    return {**result, "category": category}
+    logger.info("Timeblock created: %s [%s – %s]", activity, start, end)
+    return result
 
 
 def list_timeblocks(time_min: str, time_max: str) -> list[dict]:
@@ -77,7 +74,6 @@ def list_timeblocks(time_min: str, time_max: str) -> list[dict]:
             "start": e["start"].get("dateTime", ""),
             "end": e["end"].get("dateTime", ""),
             "notes": e.get("description", ""),
-            "category": e.get("extendedProperties", {}).get("private", {}).get("category", "unclassified"),
         }
         for e in items
     ]
@@ -93,9 +89,6 @@ def update_timeblock(event_id: str, **fields) -> dict:
         body["summary"] = fields["activity"]
     if "notes" in fields:
         body["description"] = fields["notes"]
-    if "category" in fields:
-        body["colorId"] = color_id_for(fields["category"]) or "3"
-        body["extendedProperties"] = {"private": {"category": fields["category"]}}
 
     current_start = current["start"]["dateTime"]
     current_end = current["end"]["dateTime"]

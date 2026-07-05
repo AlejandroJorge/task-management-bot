@@ -2,18 +2,14 @@
 Inline keyboard callback routing.
 
 callback_data format: namespace:action[:arg...]
-  track:cat:<category>       — category selected (pending track flow)
   track:begin:<min|open>     — start session with optional planned duration
   track:plan:<min>           — set planned end on active session
   track:extend:<min>         — extend planned end on active session
   track:stop                 — stop active session
   track:unplan               — make active session open-ended again
-  track:recat                — show category picker on active session
-  track:setcat:<category>    — set category on active session
   track:backdate             — show "started earlier" picker on active session
   track:setstart:<min>       — move session start to <min> minutes ago
   track:refresh              — re-render the status message
-  log:cat:<category>         — category selected (pending log flow)
   deltask:yes:<doc_id> / deltask:no — task deletion confirmation
   delidea:yes:<doc_id> / delidea:no — backlog deletion confirmation
 """
@@ -26,7 +22,6 @@ from telegram.ext import ContextTypes
 
 import tracking_state
 import tz as _tz
-from categories import load_categories
 from formatting import esc_md1, fmt_duration
 from tracking_tools import create_timeblock
 
@@ -34,20 +29,9 @@ logger = logging.getLogger(__name__)
 
 # Pending state for multi-step command flows (in-memory, lost on restart — acceptable)
 _pending_track: dict[int, dict] = {}  # chat_id → {activity}
-_pending_log:   dict[int, dict] = {}  # chat_id → {activity, start, end}
 
 
 # ── Keyboard builders ─────────────────────────────────────────────────────────
-
-def build_category_keyboard(callback_prefix: str) -> InlineKeyboardMarkup:
-    cats = load_categories()
-    buttons = [
-        InlineKeyboardButton(v["label"], callback_data=f"{callback_prefix}:{k}")
-        for k, v in cats.items()
-    ]
-    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
-    return InlineKeyboardMarkup(rows)
-
 
 def build_duration_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -70,10 +54,6 @@ def build_tracking_text(state: dict) -> str:
         desde = "?"
     dur = fmt_duration(elapsed)
     text = f"⏱ *{esc_md1(activity)}* — desde las {desde} ({dur})"
-    category = state.get("category", "unclassified")
-    if category != "unclassified":
-        label = load_categories().get(category, {}).get("label", category)
-        text += f"\n🏷 {esc_md1(label)}"
     if state.get("planned_end"):
         try:
             end_dt = datetime.fromisoformat(state["planned_end"]).astimezone(_tz.LIMA)
@@ -108,10 +88,7 @@ def build_tracking_keyboard(state: dict) -> InlineKeyboardMarkup:
             ],
             [InlineKeyboardButton("⏹ Parar", callback_data="track:stop")],
         ]
-    extras = [InlineKeyboardButton("⏪ Empezó antes", callback_data="track:backdate")]
-    if state.get("category", "unclassified") == "unclassified":
-        extras.insert(0, InlineKeyboardButton("🏷 Categoría", callback_data="track:recat"))
-    rows.append(extras)
+    rows.append([InlineKeyboardButton("⏪ Empezó antes", callback_data="track:backdate")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -178,8 +155,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     if ns == "track":
         await _handle_track(query, chat_id, context, parts[1:])
-    elif ns == "log":
-        await _handle_log(query, chat_id, parts[1:])
     elif ns == "deltask":
         from tasks_tools import delete_task
         await _handle_delete(query, parts[1:], delete_task, "Tarea eliminada")
@@ -200,29 +175,14 @@ async def _show_active_session(query) -> None:
 async def _handle_track(query, chat_id, context, args: list[str]) -> None:
     action = args[0] if args else ""
 
-    if action == "cat":
-        # Category chosen → show duration picker
-        category = args[1] if len(args) > 1 else "unclassified"
-        pending = _pending_track.get(chat_id)
-        if not pending:
-            await query.answer("Sesión expirada, usa /track de nuevo.", show_alert=True)
-            return
-        _pending_track[chat_id] = {**pending, "category": category}
-        cat_label = load_categories().get(category, {}).get("label", category)
-        activity = pending["activity"]
-        text = f"⏱ *{esc_md1(activity)}* — {esc_md1(cat_label)}\n¿Cuánto tiempo planeas?"
-        await query.edit_message_text(text, reply_markup=build_duration_keyboard(), parse_mode="Markdown")
-
-    elif action == "begin":
+    if action == "begin":
         # Duration chosen (or open-ended) → start session
         pending = _pending_track.pop(chat_id, None)
         if not pending:
             await query.answer("Sesión expirada, usa /track de nuevo.", show_alert=True)
             return
-        activity = pending["activity"]
-        category = pending.get("category", "unclassified")
         try:
-            tracking_state.start_tracking(activity, category=category)
+            tracking_state.start_tracking(pending["activity"])
         except ValueError as e:
             await query.answer(str(e), show_alert=True)
             return
@@ -276,18 +236,6 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
     elif action == "refresh":
         await _show_active_session(query)
 
-    elif action == "recat":
-        # Swap the keyboard for the category picker; text stays as-is
-        await query.edit_message_reply_markup(reply_markup=build_category_keyboard("track:setcat"))
-
-    elif action == "setcat" and args[1:]:
-        try:
-            tracking_state.set_category(args[1])
-        except ValueError as e:
-            await query.answer(str(e), show_alert=True)
-            return
-        await _show_active_session(query)
-
     elif action in ("plan", "extend") and args[1:]:
         # Both set planned_end to now + minutes; only the button label differs.
         try:
@@ -296,34 +244,6 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
             await query.answer(str(e), show_alert=True)
             return
         await _show_active_session(query)
-
-
-# ── Log flow ──────────────────────────────────────────────────────────────────
-
-async def _handle_log(query, chat_id, args: list[str]) -> None:
-    action = args[0] if args else ""
-
-    if action == "cat":
-        category = args[1] if len(args) > 1 else "unclassified"
-        pending = _pending_log.pop(chat_id, None)
-        if not pending:
-            await query.answer("Sesión expirada, usa /log de nuevo.", show_alert=True)
-            return
-        try:
-            create_timeblock(
-                pending["activity"],
-                pending["start"],
-                pending["end"],
-                category=category,
-            )
-        except Exception as e:
-            await query.edit_message_text(f"Error al registrar: {e}")
-            return
-        elapsed = _elapsed({"started_at": pending["start"], "ended_at": pending["end"]})
-        await query.edit_message_text(
-            f"✅ *{esc_md1(pending['activity'])}* — {fmt_duration(elapsed)} registrados.",
-            parse_mode="Markdown",
-        )
 
 
 # ── Delete flows ──────────────────────────────────────────────────────────────
@@ -370,12 +290,7 @@ def _resolve_overlaps(new_start: str, old_start: str) -> str | None:
 
 def _create_timeblock_safe(final: dict) -> None:
     try:
-        create_timeblock(
-            final["activity"],
-            final["started_at"],
-            final["ended_at"],
-            category=final.get("category", "unclassified"),
-        )
+        create_timeblock(final["activity"], final["started_at"], final["ended_at"])
     except Exception:
         logger.exception("Failed to create timeblock on stop")
 

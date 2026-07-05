@@ -11,7 +11,7 @@ from calendar_tools import list_events
 from digest import build_digest
 from formatting import SEP, bold, esc, esc_md1, fmt_due, fmt_duration, italic
 from tasks_tools import create_task, list_tasks, update_task
-from tracking_tools import delete_timeblock, list_timeblocks, update_timeblock
+from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/events — próximos eventos\n\n"
         "*Tracking*\n"
         "Escribe cualquier texto — iniciar (o cambiar de) actividad al instante\n"
-        "/track <actividad> — iniciar sesión eligiendo categoría y duración\n"
+        "/track <actividad> — iniciar sesión eligiendo duración\n"
         "/log <actividad> <inicio HH:MM> <fin HH:MM> — registrar bloque pasado\n"
         "/blocks — listar bloques de hoy\n"
         "/delblock <n> — eliminar bloque\n"
@@ -207,16 +207,15 @@ async def delidea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from callbacks import _pending_track, build_category_keyboard
+    from callbacks import _pending_track, build_duration_keyboard
     activity = " ".join(context.args) if context.args else ""
     if not activity:
         await update.message.reply_text("Uso: /track <actividad>")
         return
-    chat_id = update.effective_chat.id
-    _pending_track[chat_id] = {"activity": activity}
+    _pending_track[update.effective_chat.id] = {"activity": activity}
     await update.message.reply_text(
-        f"🏷 Categoría para *{esc_md1(activity)}*:",
-        reply_markup=build_category_keyboard("track:cat"),
+        f"⏱ *{esc_md1(activity)}*\n¿Cuánto tiempo planeas?",
+        reply_markup=build_duration_keyboard(),
         parse_mode="Markdown",
     )
 
@@ -240,7 +239,6 @@ def _parse_today_range(start_str: str, end_str: str) -> tuple[str, str]:
 
 
 async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    from callbacks import _pending_log, build_category_keyboard
     args = context.args or []
     if len(args) < 3:
         await update.message.reply_text("Uso: /log <actividad> <inicio HH:MM> <fin HH:MM>")
@@ -248,18 +246,16 @@ async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     activity = " ".join(args[:-2])
     try:
         start_iso, end_iso = _parse_today_range(args[-2], args[-1])
+        create_timeblock(activity, start_iso, end_iso)
     except ValueError as e:
         await update.message.reply_text(str(e))
         return
-    chat_id = update.effective_chat.id
-    _pending_log[chat_id] = {
-        "activity": activity,
-        "start": start_iso,
-        "end": end_iso,
-    }
+    except Exception as e:
+        await update.message.reply_text(f"Error al registrar: {e}")
+        return
+    mins = round((datetime.fromisoformat(end_iso) - datetime.fromisoformat(start_iso)).total_seconds() / 60)
     await update.message.reply_text(
-        f"🏷 Categoría para *{esc_md1(activity)}*:",
-        reply_markup=build_category_keyboard("log:cat"),
+        f"✅ *{esc_md1(activity)}* — {fmt_duration(mins)} registrados.",
         parse_mode="Markdown",
     )
 
