@@ -30,12 +30,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "*Tareas*\n"
         "/tasks — listar tareas pendientes\n"
         "/task <título> — crear tarea\n"
-        "/done <id> — marcar tarea como completada\n"
-        "/deltask <id> — eliminar tarea\n\n"
+        "/done <n> — marcar tarea como completada\n"
+        "/deltask <n> — eliminar tarea\n\n"
         "*Backlog*\n"
         "/backlog — ver ideas a largo plazo\n"
         "/idea <título> — agregar idea al backlog\n"
-        "/delidea <id> — eliminar idea del backlog\n\n"
+        "/delidea <n> — eliminar idea del backlog\n\n"
         "*Calendario*\n"
         "/events — próximos eventos\n\n"
         "*Tracking*\n"
@@ -86,12 +86,12 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await update.message.reply_text("No hay tareas pendientes.")
         return
     lines = [f"✅ {bold(f'Tareas ({len(tasks)})')}", SEP, ""]
-    for t in tasks:
+    for i, t in enumerate(tasks, 1):
         due_part = f" _{esc(fmt_due(t['due']))}_" if t.get("due") else ""
-        lines.append(f"• \\#{t['doc_id']} {bold(t['title'])}{due_part}")
+        lines.append(f"{i}\\. {bold(t['title'])}{due_part}")
         if t.get("notes"):
             lines.append(f"  {italic(t['notes'])}")
-    lines += ["", italic("Usa /done \\<id\\> o /deltask \\<id\\>")]
+    lines += ["", italic("Usa /done \\<n\\> o /deltask \\<n\\>")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
@@ -104,48 +104,56 @@ async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(f"✅ Tarea creada: {title}")
 
 
+async def _pick_numbered(update: Update, arg: str, items: list[dict], list_cmd: str) -> dict | None:
+    """Resolve a 1-based position (as shown by list_cmd) to an item, replying on error."""
+    try:
+        n = int(arg)
+    except ValueError:
+        await update.message.reply_text(f"El número debe ser un entero (ver {list_cmd}).")
+        return None
+    if not 1 <= n <= len(items):
+        await update.message.reply_text(f"No existe el número {n}. Hay {len(items)} (ver {list_cmd}).")
+        return None
+    return items[n - 1]
+
+
 async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
-        await update.message.reply_text("Uso: /done <id>")
+        await update.message.reply_text("Uso: /done <n>  (número según /tasks)")
+        return
+    task = await _pick_numbered(update, context.args[0], list_tasks(show_done=False), "/tasks")
+    if task is None:
         return
     try:
-        doc_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("El id debe ser un número.")
-        return
-    try:
-        update_task(doc_id, done=True)
-        await update.message.reply_text("✅ Tarea completada.")
+        update_task(task["doc_id"], done=True)
+        await update.message.reply_text(f"✅ Tarea completada: {task['title']}")
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
 
 async def _confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE,
-                          namespace: str, noun: str, items: list[dict]) -> None:
-    """Shared /deltask and /delidea flow: validate id, ask for confirmation."""
+                          namespace: str, noun: str, items: list[dict], list_cmd: str) -> None:
+    """Shared /deltask and /delidea flow: resolve position, ask for confirmation.
+    The callback carries the doc_id so later list changes can't shift the target."""
     if not context.args:
-        await update.message.reply_text(f"Uso: /{namespace} <id>")
+        await update.message.reply_text(f"Uso: /{namespace} <n>  (número según {list_cmd})")
         return
-    try:
-        doc_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("El id debe ser un número.")
+    item = await _pick_numbered(update, context.args[0], items, list_cmd)
+    if item is None:
         return
-    item = next((i for i in items if i["doc_id"] == doc_id), None)
-    name = item["title"] if item else f"#{doc_id}"
     keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Eliminar", callback_data=f"{namespace}:yes:{doc_id}"),
+        InlineKeyboardButton("✅ Eliminar", callback_data=f"{namespace}:yes:{item['doc_id']}"),
         InlineKeyboardButton("❌ Cancelar", callback_data=f"{namespace}:no"),
     ]])
     await update.message.reply_text(
-        f"🗑 Eliminar {noun} *{esc_md1(name)}*?",
+        f"🗑 Eliminar {noun} *{esc_md1(item['title'])}*?",
         parse_mode="Markdown",
         reply_markup=keyboard,
     )
 
 
 async def deltask_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _confirm_delete(update, context, "deltask", "tarea", list_tasks(show_done=True))
+    await _confirm_delete(update, context, "deltask", "tarea", list_tasks(show_done=False), "/tasks")
 
 
 async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -181,11 +189,11 @@ async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("No hay ideas en el backlog.")
         return
     lines = [f"💡 {bold(f'Backlog ({len(items)})')}", SEP, ""]
-    for item in items:
-        lines.append(f"• \\#{item['doc_id']} {bold(item['title'])}")
+    for i, item in enumerate(items, 1):
+        lines.append(f"{i}\\. {bold(item['title'])}")
         if item.get("description"):
             lines.append(f"  {italic(item['description'])}")
-    lines += ["", italic("Usa /delidea \\<id\\> para eliminar")]
+    lines += ["", italic("Usa /delidea \\<n\\> para eliminar")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
@@ -203,7 +211,7 @@ async def idea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def delidea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _confirm_delete(update, context, "delidea", "idea", list_backlog())
+    await _confirm_delete(update, context, "delidea", "idea", list_backlog(), "/backlog")
 
 
 async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -298,19 +306,11 @@ async def blocks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def _pick_block(update: Update, arg: str) -> dict | None:
     """Resolve a /blocks number to a block, replying with the error if invalid."""
     try:
-        n = int(arg)
-    except ValueError:
-        await update.message.reply_text("El número debe ser un entero (ver /blocks).")
-        return None
-    try:
         blocks = _todays_blocks()
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
         return None
-    if not 1 <= n <= len(blocks):
-        await update.message.reply_text(f"No existe el bloque {n}. Hoy hay {len(blocks)} (ver /blocks).")
-        return None
-    return blocks[n - 1]
+    return await _pick_numbered(update, arg, blocks, "/blocks")
 
 
 async def delblock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
