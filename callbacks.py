@@ -109,11 +109,13 @@ def build_backdate_keyboard() -> InlineKeyboardMarkup:
 
 # ── Status message helpers ────────────────────────────────────────────────────
 
-async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> None:
+async def send_tracking_status(bot, chat_id: int | str, notify: bool = True, silent: bool = False) -> None:
     """
     Send or update the persistent tracking status message.
     notify=True  → delete old + send new (push notification).
     notify=False → edit in place (silent).
+    silent=True  → when re-sending, do it without a notification
+                   (moves the message to the bottom quietly).
     """
     state = tracking_state.get_state()
     msg_id = state.get("status_message_id")
@@ -139,7 +141,10 @@ async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> 
             # Unchanged text is fine — don't fall through to a (notifying) resend
             if "not modified" in str(e).lower():
                 return
-    msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown")
+    msg = await bot.send_message(
+        chat_id=chat_id, text=text, reply_markup=keyboard,
+        parse_mode="Markdown", disable_notification=silent,
+    )
     tracking_state.set_status_message_id(msg.message_id)
 
 

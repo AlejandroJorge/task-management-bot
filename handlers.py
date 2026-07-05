@@ -77,7 +77,12 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    import tracking_state
+    from callbacks import send_tracking_status
     await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
+    # Keep the tracking box below the digest: delete + re-send it quietly
+    if tracking_state.get_state().get("active"):
+        await send_tracking_status(context.bot, update.effective_chat.id, notify=True, silent=True)
 
 
 async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
