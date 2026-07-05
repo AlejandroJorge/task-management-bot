@@ -42,6 +42,20 @@ async def daily_summary_job(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.exception("Daily summary failed")
         text = f"No pude generar el resumen de hoy: {e}"
+
+    # Flag backlog items that have been sitting without a first actionable step
+    try:
+        from backlog_tools import backlog_missing_steps
+        stale = backlog_missing_steps()
+        if stale:
+            names = ", ".join(f"«{i['title']}»" for i in stale[:5])
+            text += (
+                f"\n\n💡 Ideas sin primer paso: {names}."
+                "\nDales uno con /step <n> <acción> (ver /backlog)."
+            )
+    except Exception:
+        logger.exception("Backlog step check failed")
+
     await context.bot.send_message(chat_id=context.job.data, text=text)
 
 

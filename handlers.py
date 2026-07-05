@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 
 import auth
 import tz as _tz
-from backlog_tools import create_backlog_item, list_backlog
+from backlog_tools import create_backlog_item, list_backlog, set_backlog_step
 from calendar_tools import list_events
 from digest import build_digest
 from formatting import SEP, bold, esc, esc_md1, fmt_due, fmt_duration, italic
@@ -34,7 +34,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/deltask <n> — eliminar tarea\n\n"
         "*Backlog*\n"
         "/backlog — ver ideas a largo plazo\n"
-        "/idea <título> — agregar idea al backlog\n"
+        "/idea <título> | <desc> | <primer paso> — agregar idea (desc y paso opcionales)\n"
+        "/step <n> <primer paso> — fijar el primer paso accionable de una idea\n"
         "/delidea <n> — eliminar idea del backlog\n\n"
         "*Calendario*\n"
         "/events — próximos eventos\n\n"
@@ -198,21 +199,40 @@ async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lines.append(f"{i}\\. {bold(item['title'])}")
         if item.get("description"):
             lines.append(f"  {italic(item['description'])}")
-    lines += ["", italic("Usa /delidea \\<n\\> para eliminar")]
+        if item.get("next_step"):
+            lines.append(f"  ▸ {esc(item['next_step'])}")
+        else:
+            lines.append(f"  ⚠ {italic('sin primer paso')}")
+    lines += ["", italic("Usa /step \\<n\\> \\<primer paso\\> o /delidea \\<n\\>")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
 async def idea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = " ".join(context.args) if context.args else ""
     if not text:
-        await update.message.reply_text("Uso: /idea <título>  (o /idea <título> | <descripción>)")
+        await update.message.reply_text(
+            "Uso: /idea <título>  (o /idea <título> | <descripción> | <primer paso>)"
+        )
         return
-    if " | " in text:
-        title, desc = text.split(" | ", 1)
-    else:
-        title, desc = text, ""
-    create_backlog_item(title.strip(), description=desc.strip())
-    await update.message.reply_text(f"💡 Idea guardada: {title.strip()}")
+    title, desc, step = (text.split(" | ", 2) + ["", ""])[:3]
+    create_backlog_item(title.strip(), description=desc.strip(), next_step=step.strip())
+    reply = f"💡 Idea guardada: {title.strip()}"
+    if not step.strip():
+        reply += "\nSin primer paso aún — dale uno con /step cuando lo tengas."
+    await update.message.reply_text(reply)
+
+
+async def step_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text("Uso: /step <n> <primer paso>  (número según /backlog)")
+        return
+    item = await _pick_numbered(update, args[0], list_backlog(), "/backlog")
+    if item is None:
+        return
+    step = " ".join(args[1:])
+    set_backlog_step(item["doc_id"], step)
+    await update.message.reply_text(f"▸ Primer paso para «{item['title']}»: {step}")
 
 
 async def delidea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
