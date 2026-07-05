@@ -76,15 +76,11 @@ def _system_prompt() -> str:
         "y un calendario de registro de tiempo ('Tracking'). "
         "Las tareas son acciones inmediatas; el backlog son ideas o proyectos a largo plazo. "
         "REGLAS DE TRACKING DE TIEMPO: "
-        "(1) create_timeblock → SOLO para registrar intervalos 100% pasados. NO toca ni interrumpe ninguna sesión en vivo. "
-        "(2) start_tracking → arranca una sesión en vivo. Si el usuario dice 'llevo N minutos/horas haciendo X', usa el parámetro opcional started_at con la hora de inicio real (now − N minutos) para que el elapsed y el bloque en Calendar reflejen el tiempo real. "
-        "(3) stop_tracking → termina la sesión activa con hora exacta. Solo cuando el usuario diga que terminó. "
-        "(4) resume_as_live → cuando el usuario dice que SIGUE haciendo algo ya registrado como bloque pasado: adopta ese evento como sesión activa. Falla si hay otros bloques entre el fin de ese evento y ahora. "
-        "(5) get_tracking_status → estado actual. elapsed_minutes = now - started_at. Si el usuario cuestiona el tiempo, explícalo; NUNCA reinicies la sesión. "
-        "(6) NUNCA llames stop_tracking para registrar un bloque pasado. Los dos modos son completamente independientes. "
-        "(7) start_tracking con planned_minutes → modo planificado. Úsalo cuando el usuario diga 'voy a hacer X por N minutos/horas'. El bot avisará 5 min antes del fin y al terminar el tiempo. "
-        "(8) extend_tracking(minutes) → cuando el usuario quiere continuar N minutos más en una sesión planificada. Solo válido en modo planificado. "
-        "(9) CATEGORÍAS: al llamar create_timeblock o start_tracking, SIEMPRE incluye el parámetro category. Infiere la categoría más apropiada a partir del nombre de la actividad y el contexto. Si hay duda genuina, usa 'unclassified'. "
+        "(1) create_timeblock → SOLO para registrar intervalos 100% pasados. "
+        "(2) start_tracking → arranca una sesión en vivo. Si el usuario dice 'llevo N minutos/horas haciendo X', usa started_at con la hora de inicio real. "
+        "(3) stop_tracking → termina la sesión activa y la registra en Calendar. Solo cuando el usuario diga que terminó. "
+        "(4) NUNCA llames stop_tracking para registrar un bloque pasado; usa create_timeblock. "
+        "(5) CATEGORÍAS: al llamar create_timeblock o start_tracking, SIEMPRE incluye category. Infiere la categoría más apropiada; si hay duda usa 'unclassified'. "
         "Interpreta las solicitudes en lenguaje natural y llama las herramientas correspondientes. "
         "REGLAS para el campo 'due' al crear o editar tareas: "
         "(1) Si el usuario NO menciona fecha ni plazo, NO incluyas 'due'. "
@@ -110,11 +106,11 @@ def _system_prompt() -> str:
         base += "\n\n" + profile_ctx
     try:
         ts = _get_tracking_state()
-        if ts.get("status") == "ACTIVO":
-            ts_lines = [f"Tracking activo: {ts['activity']} (modo {ts.get('mode', 'indefinido')}, {ts.get('elapsed_minutes', 0)} min transcurridos)"]
-            if ts.get("mode") == "planificado":
-                ts_lines.append(f"  Fin planificado: {ts.get('planned_end', '?')} ({ts.get('minutes_remaining', '?')} min restantes)")
-            base += "\n\n" + "\n".join(ts_lines)
+        if ts.get("active"):
+            ts_line = f"Tracking activo: {ts['activity']} ({ts.get('elapsed_minutes', 0)} min transcurridos)"
+            if ts.get("planned_end") and ts.get("minutes_remaining") is not None:
+                ts_line += f" — fin planificado en {ts.get('minutes_remaining')} min"
+            base += "\n\n" + ts_line
     except Exception:
         pass
     try:

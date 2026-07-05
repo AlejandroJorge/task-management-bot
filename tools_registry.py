@@ -11,12 +11,9 @@ from backlog_tools import (
 from calendar_tools import create_event, delete_event, list_events, update_event
 from tasks_tools import create_task, delete_task, list_tasks, update_task
 from tracking_tools import create_timeblock, delete_timeblock, list_timeblocks, update_timeblock
-from tracking_state import extend_tracking, get_state as get_tracking_status, resume_as_live, start_tracking, stop_tracking
+from tracking_state import start_tracking, stop_tracking
 
-# Tools that require explicit user confirmation before execution
 REQUIRE_CONFIRMATION = {"delete_event", "delete_task", "delete_backlog_item", "delete_timeblock"}
-
-# ── Tool schemas (OpenAI/DeepSeek function-calling format) ────────────────────
 
 TOOLS = [
     {
@@ -206,22 +203,21 @@ TOOLS = [
         "function": {
             "name": "create_timeblock",
             "description": (
-                "Register a past time interval spent on an activity in the Tracking calendar. "
+                "Register a past time interval in the Tracking calendar. "
                 "Both start and end must be before the current time. "
-                "Overlapping timeblocks are rejected. "
-                "Use ISO 8601 with UTC offset, e.g. 2026-06-07T16:34:00-05:00."
+                "Overlapping timeblocks are rejected."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "activity": {"type": "string", "description": "Name of the activity"},
-                    "start":    {"type": "string", "description": "Start datetime, ISO 8601 with offset"},
-                    "end":      {"type": "string", "description": "End datetime, ISO 8601 with offset"},
-                    "notes":    {"type": "string", "description": "Optional notes"},
+                    "activity": {"type": "string"},
+                    "start":    {"type": "string", "description": "ISO 8601 with offset"},
+                    "end":      {"type": "string", "description": "ISO 8601 with offset"},
+                    "notes":    {"type": "string"},
                     "category": {
                         "type": "string",
                         "enum": list(load_categories().keys()),
-                        "description": "Activity category. Infer from the activity name; descriptions are in the system prompt.",
+                        "description": "Activity category.",
                     },
                 },
                 "required": ["activity", "start", "end", "category"],
@@ -232,12 +228,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_timeblocks",
-            "description": "Query all timeblocks in the Tracking calendar between two datetimes.",
+            "description": "Query timeblocks in the Tracking calendar between two datetimes.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "time_min": {"type": "string", "description": "Start of range, ISO 8601 with offset"},
-                    "time_max": {"type": "string", "description": "End of range, ISO 8601 with offset"},
+                    "time_min": {"type": "string", "description": "ISO 8601 with offset"},
+                    "time_max": {"type": "string", "description": "ISO 8601 with offset"},
                 },
                 "required": ["time_min", "time_max"],
             },
@@ -247,10 +243,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "update_timeblock",
-            "description": (
-                "Edit an existing timeblock. Any new start/end times must still be in the past. "
-                "Overlapping timeblocks are rejected."
-            ),
+            "description": "Edit an existing timeblock. New times must be in the past.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -262,7 +255,6 @@ TOOLS = [
                     "category": {
                         "type": "string",
                         "enum": list(load_categories().keys()),
-                        "description": "New category for the timeblock.",
                     },
                 },
                 "required": ["event_id"],
@@ -286,57 +278,24 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "extend_tracking",
-            "description": (
-                "Extend the planned end of an active planificado tracking session by N minutes from now. "
-                "Use when the user says they want to continue the current activity for N more minutes "
-                "after being asked if they want to extend. Only valid for planificado sessions."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "minutes": {"type": "integer", "description": "Additional minutes from now"},
-                },
-                "required": ["minutes"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "start_tracking",
             "description": (
-                "Start a live tracking session for an activity. "
-                "Creates an event in the Tracking calendar and keeps its end time updated every 5 minutes. "
-                "Fails if a session is already active — call stop_tracking first. "
-                "Use started_at when the user says they have already been doing something for a while "
-                "(e.g. 'I've been watching YouTube for 30 minutes') — pass the real past start time so "
-                "elapsed time and the Calendar block reflect the actual duration."
+                "Start a live tracking session. "
+                "Use started_at when the user says they already started a while ago. "
+                "The bot will show a widget with duration options."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "activity": {"type": "string", "description": "Name of the activity to track"},
+                    "activity": {"type": "string"},
                     "started_at": {
                         "type": "string",
-                        "description": (
-                            "Optional. ISO 8601 with offset (e.g. 2026-06-07T22:17:00-05:00). "
-                            "Use when the activity already started before now. "
-                            "Must be in the past and have no overlapping timeblocks."
-                        ),
-                    },
-                    "planned_minutes": {
-                        "type": "integer",
-                        "description": (
-                            "Optional. Planned duration in minutes. Use when the user says "
-                            "'I want to do X for 30 minutes / 1 hour'. Enables planificado mode: "
-                            "bot stays quiet until 5 min before end, then asks to extend or stop."
-                        ),
+                        "description": "Optional. ISO 8601 with offset. Use when activity already started before now.",
                     },
                     "category": {
                         "type": "string",
                         "enum": list(load_categories().keys()),
-                        "description": "Activity category. Infer from the activity name; descriptions are in the system prompt.",
+                        "description": "Activity category.",
                     },
                 },
                 "required": ["activity", "category"],
@@ -347,41 +306,29 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "stop_tracking",
-            "description": "Stop the current live tracking session. Records the exact end time in Google Calendar.",
+            "description": "Stop the current live tracking session and log it to Google Calendar.",
             "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_tracking_status",
-            "description": "Return the current tracking state: LIBRE (nothing active) or ACTIVO with activity name and elapsed time in minutes.",
-            "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "resume_as_live",
-            "description": (
-                "Adopt an existing past timeblock as the current live tracking session. "
-                "Use when the user says they are still doing an activity that was already registered as a finished block. "
-                "Extends the event's end to now and starts the 5-minute sync. "
-                "Fails if there are other timeblocks between that event's end and now (would cause overlap), "
-                "or if a session is already active."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "event_id": {"type": "string", "description": "ID of the existing timeblock to resume as live"},
-                },
-                "required": ["event_id"],
-            },
         },
     },
 ]
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
+
+def _stop_and_log() -> dict:
+    from tracking_tools import create_timeblock as _create_timeblock
+    final = stop_tracking()
+    try:
+        _create_timeblock(
+            final["activity"],
+            final["started_at"],
+            final["ended_at"],
+            category=final.get("category", "unclassified"),
+        )
+    except Exception:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("Failed to create timeblock on LLM stop")
+    return final
+
 
 _SYNC_DISPATCH: dict = {
     "create_event":        create_event,
@@ -403,16 +350,12 @@ _SYNC_DISPATCH: dict = {
     "list_timeblocks":     list_timeblocks,
     "update_timeblock":    lambda **kw: update_timeblock(kw.pop("event_id"), **kw),
     "delete_timeblock":    delete_timeblock,
-    "extend_tracking":     extend_tracking,
     "start_tracking":      start_tracking,
-    "stop_tracking":       lambda **_: stop_tracking(),
-    "get_tracking_status": lambda **_: get_tracking_status(),
-    "resume_as_live":      resume_as_live,
+    "stop_tracking":       lambda **_: _stop_and_log(),
 }
 
 
 def dispatch(name: str, arguments_json: str) -> str:
-    """Call a tool by name with JSON arguments. Returns result as a JSON string."""
     args = json.loads(arguments_json)
     fn = _SYNC_DISPATCH[name]
     result = fn(**args)

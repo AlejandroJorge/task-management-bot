@@ -5,12 +5,13 @@ from datetime import datetime, time
 import tz as _tz
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 import auth
 import tracking_state
+from callbacks import handle_callback
 from handlers import backlog, clear, handle_message, help_command, login, start, status
-from jobs import auth_check, digest_job, event_notifier, tracking_active_job, tracking_nudge_job, tracking_sync_job
+from jobs import auth_check, digest_job, event_notifier, tracking_nudge_job, tracking_plan_job
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -33,7 +34,7 @@ def main() -> None:
 
     app = Application.builder().token(token).build()
 
-    # ── command handlers (owner only) ─────────────────────────────────────────
+    # ── command handlers ──────────────────────────────────────────────────────
     app.add_handler(CommandHandler("start",    start,        filters=me))
     app.add_handler(CommandHandler("help",     help_command, filters=me))
     app.add_handler(CommandHandler("clear",    clear,        filters=me))
@@ -41,33 +42,28 @@ def main() -> None:
     app.add_handler(CommandHandler("status",   status,       filters=me))
     app.add_handler(CommandHandler("backlog",  backlog,      filters=me))
 
-    # ── message handlers (owner only) ─────────────────────────────────────────
+    # ── inline button callbacks ───────────────────────────────────────────────
+    app.add_handler(CallbackQueryHandler(handle_callback))
+
+    # ── free-text messages ────────────────────────────────────────────────────
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & me, handle_message))
 
     # ── proactive jobs ────────────────────────────────────────────────────────
     jq = app.job_queue
 
-    # Auth watchdog: poll every 10 min, remind every 20 min if unauthenticated
     jq.run_repeating(auth_check, interval=600, first=15, data=chat_id, name="auth_check")
-
-    # Event notifier: checks every minute, fires at 120/90/60/50/40/30/20/10/5 min before
     jq.run_repeating(event_notifier, interval=60, first=10, data=chat_id, name="event_notifier")
 
-    # Tracking: sync active session end time to Calendar every 5 min
-    jq.run_repeating(tracking_sync_job, interval=300, first=60, name="tracking_sync")
-
-    # Tracking active: indefinido check-ins and planificado end notifications (every minute)
-    jq.run_repeating(tracking_active_job, interval=60, first=60, data=chat_id, name="tracking_active")
-
-    # Tracking nudge: remind user to track when LIBRE
+    # Nudge: delete + resend status message on interval (push notification)
     nudge_mins = int(os.getenv("TRACKING_NUDGE_MINUTES", "15"))
     jq.run_repeating(tracking_nudge_job, interval=nudge_mins * 60, first=nudge_mins * 60, data=chat_id, name="tracking_nudge")
 
-    # Morning digest
+    # Planned-end watcher: fires every minute, only acts at 5 min warning and time-up
+    jq.run_repeating(tracking_plan_job, interval=60, first=60, data=chat_id, name="tracking_plan")
+
     morning_hour = int(os.getenv("MORNING_DIGEST_HOUR", "6"))
     jq.run_daily(digest_job, time=time(morning_hour, 0), data=chat_id, name="morning_digest")
 
-    # Evening digest
     evening_hour = int(os.getenv("EVENING_DIGEST_HOUR", "20"))
     jq.run_daily(digest_job, time=time(evening_hour, 0), data=chat_id, name="evening_digest")
 
@@ -76,7 +72,7 @@ def main() -> None:
         if auth.load_saved_token():
             logger.info("Refresh token restored from DB.")
         state = tracking_state.load_state()
-        if state.get("status") == "ACTIVO":
+        if state.get("active"):
             logger.info("Tracking session restored: %s", state.get("activity"))
             try:
                 started = datetime.fromisoformat(state["started_at"]).astimezone(_tz.LIMA)
@@ -86,8 +82,8 @@ def main() -> None:
                     f"(desde las {started.strftime('%H:%M')})."
                 )
             except Exception:
-                logger.warning("Corrupt tracking state on startup (missing/invalid started_at), resetting to LIBRE")
-                tracking_state._state = {"status": "LIBRE"}
+                logger.warning("Corrupt tracking state on startup, resetting to inactive")
+                tracking_state._state = {"active": False, "status_message_id": None}
                 tracking_state.save_state()
                 restart_msg = "He sido reiniciado."
         else:

@@ -12,7 +12,8 @@ def _assert_past(dt_str: str, label: str) -> datetime:
     dt = datetime.fromisoformat(dt_str)
     if dt.tzinfo is None:
         raise ValueError(f"{label} debe incluir zona horaria (ej. -05:00)")
-    if dt >= _tz.now():
+    from datetime import timedelta
+    if dt > _tz.now() + timedelta(seconds=5):
         raise ValueError(f"{label} debe ser en el pasado")
     return dt
 

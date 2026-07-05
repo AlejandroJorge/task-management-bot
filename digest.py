@@ -77,7 +77,7 @@ def build_digest() -> str:
     lines.append(SEP)
     try:
         live = _get_tracking_state()
-        is_active = live.get("status") == "ACTIVO"
+        is_active = live.get("active", False)
         live_event_id = live.get("event_id") if is_active else None
         elapsed_mins = max(0, live.get("elapsed_minutes", 0)) if is_active else 0
 

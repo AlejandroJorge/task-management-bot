@@ -2,11 +2,12 @@ import json
 import logging
 from collections import defaultdict
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 import agent
 import auth
+import tracking_state
 from agent import ConfirmationRequest
 from backlog_tools import list_backlog
 from digest import build_digest
@@ -19,18 +20,16 @@ from tools_registry import REQUIRE_CONFIRMATION
 logger = logging.getLogger(__name__)
 
 
-async def _reply(message, text: str, parse_mode: str = "Markdown") -> None:
-    """Send a reply, falling back to plain text if Markdown parsing fails."""
+async def _reply(message, text: str, parse_mode: str = "Markdown", reply_markup=None) -> None:
     logger.info("Sending reply: %s", text.splitlines()[0][:120] if text else "(empty)")
     try:
-        await message.reply_text(text, parse_mode=parse_mode)
+        await message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
     except Exception:
         logger.warning("Markdown parse failed, retrying as plain text")
-        await message.reply_text(text)
+        await message.reply_text(text, reply_markup=reply_markup)
 
 
 def _describe_call(name: str, args: dict) -> str:
-    """Return a human-readable label for a destructive tool call."""
     if name == "delete_task":
         doc_id = args.get("doc_id")
         task = next((t for t in list_tasks(show_done=True) if t["doc_id"] == doc_id), None)
@@ -65,9 +64,6 @@ def _describe_call(name: str, args: dict) -> str:
 
 _histories: dict[int, list[dict]] = defaultdict(list)
 _pending: dict[int, ConfirmationRequest] = {}
-
-_YES = {"y", "yes", "si", "sí", "yep", "yeah", "sure", "ok", "confirm", "confirmar", "afirmar", "dale", "va"}
-_NO  = {"n", "no", "nope", "cancel", "nah", "cancelar", "rechazar"}
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -117,7 +113,6 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text(f"Error de autenticacion: {e}")
 
 
-
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
 
@@ -155,20 +150,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     logger.info("Message from %s: %s", chat_id, text[:80])
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    if chat_id in _pending:
-        word = text.lower().split()[0]
-        if word in _YES:
-            confirmed = True
-        elif word in _NO:
-            confirmed = False
-        else:
-            await update.message.reply_text("Responde si o no.")
-            return
-
-        request = _pending.pop(chat_id)
-        reply = await agent.resume_after_confirmation(confirmed, request, _histories[chat_id])
-        await _reply(update.message, reply)
-        return
+    state_before = tracking_state.get_state()
 
     try:
         result = await agent.process(text, _histories[chat_id])
@@ -177,6 +159,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(f"Error: {exc}")
         return
 
+    state_after = tracking_state.get_state()
+    tracking_started = not state_before.get("active") and state_after.get("active")
+    tracking_stopped = state_before.get("active") and not state_after.get("active")
+
     if isinstance(result, ConfirmationRequest):
         _pending[chat_id] = result
         destructive = [c for c in result.pending_calls if c["name"] in REQUIRE_CONFIRMATION]
@@ -184,9 +170,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         for call in destructive:
             args = json.loads(call["args_json"])
             lines.append(f"• {esc(_describe_call(call['name'], args))}")
-        lines += ["", esc("Responde si o no.")]
-        await _reply(update.message, "\n".join(lines), parse_mode="MarkdownV2")
-    else:
-        if len(_histories[chat_id]) > 40:
-            result += "\n\n_(Historial largo — considera /clear si empiezas un tema nuevo)_"
-        await _reply(update.message, result)
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Confirmar", callback_data="confirm:yes"),
+            InlineKeyboardButton("❌ Cancelar", callback_data="confirm:no"),
+        ]])
+        await _reply(update.message, "\n".join(lines), parse_mode="MarkdownV2", reply_markup=keyboard)
+        return
+
+    # If tracking just started, use the status widget as the reply (skip LLM text)
+    if tracking_started:
+        from callbacks import build_tracking_keyboard, build_tracking_text
+        state = tracking_state.get_state()
+        msg = await update.message.reply_text(
+            build_tracking_text(state),
+            reply_markup=build_tracking_keyboard(state),
+            parse_mode="Markdown",
+        )
+        tracking_state.set_status_message_id(msg.message_id)
+        return
+
+    await _reply(update.message, result)
+
+    # If tracking just stopped via LLM, silently update the status message
+    if tracking_stopped:
+        from callbacks import send_tracking_status
+        await send_tracking_status(context.bot, chat_id, notify=False)
+
+    if len(_histories[chat_id]) > 40:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="_(Historial largo — considera /clear si empiezas un tema nuevo)_",
+            parse_mode="Markdown",
+        )
