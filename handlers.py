@@ -1,23 +1,16 @@
-import json
 import logging
-from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-import agent
 import auth
 import tz as _tz
-from agent import ConfirmationRequest
-from backlog_tools import list_backlog
-from callbacks import _pending_log, _pending_track, build_category_keyboard
+from backlog_tools import create_backlog_item, list_backlog
+from calendar_tools import list_events
 from digest import build_digest
-from formatting import SEP, bold, esc, esc_md1, italic
-from calendar_tools import get_event
-from tracking_tools import get_timeblock
-from tasks_tools import list_tasks
-from tools_registry import REQUIRE_CONFIRMATION
+from formatting import SEP, bold, esc, esc_md1, fmt_due, italic
+from tasks_tools import create_task, list_tasks, update_task
 
 logger = logging.getLogger(__name__)
 
@@ -31,60 +24,35 @@ async def _reply(message, text: str, parse_mode: str = "Markdown", reply_markup=
         await message.reply_text(text, reply_markup=reply_markup)
 
 
-def _describe_call(name: str, args: dict) -> str:
-    if name == "delete_task":
-        doc_id = args.get("doc_id")
-        task = next((t for t in list_tasks(show_done=True) if t["doc_id"] == doc_id), None)
-        return task["title"] if task else f"tarea #{doc_id}"
-    if name == "delete_backlog_item":
-        doc_id = args.get("doc_id")
-        item = next((i for i in list_backlog() if i["doc_id"] == doc_id), None)
-        return item["title"] if item else f"backlog #{doc_id}"
-    if name == "delete_event":
-        event_id = args.get("event_id", "")
-        try:
-            event = get_event(event_id)
-            return event.get("summary") or "(evento sin título)"
-        except Exception:
-            return "(evento no disponible)"
-    if name == "delete_timeblock":
-        event_id = args.get("event_id", "")
-        try:
-            from datetime import datetime
-            import tz as _tz
-            event = get_timeblock(event_id)
-            activity = event.get("summary", "?")
-            start_raw = event["start"].get("dateTime", "")
-            end_raw = event["end"].get("dateTime", "")
-            start_t = datetime.fromisoformat(start_raw).astimezone(_tz.LIMA).strftime("%H:%M")
-            end_t = datetime.fromisoformat(end_raw).astimezone(_tz.LIMA).strftime("%H:%M")
-            return f"{activity} ({start_t}–{end_t})"
-        except Exception:
-            return "(bloque de tiempo no disponible)"
-    return name
-
-
-_histories: dict[int, list[dict]] = defaultdict(list)
-_pending: dict[int, ConfirmationRequest] = {}
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Hola. Soy tu asistente personal.\n"
-        "Puedo gestionar tu Google Calendar y tu lista de tareas.\n"
-        "Escribe lo que necesitas."
+        "Gestiono tu calendario, tareas y backlog.\n"
+        "Usa /help para ver los comandos disponibles."
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "*Comandos disponibles*\n\n"
-        "/status — resumen del dia: eventos, tracking y tareas\n"
+        "*Tareas*\n"
+        "/tasks — listar tareas pendientes\n"
+        "/task <título> — crear tarea\n"
+        "/done <id> — marcar tarea como completada\n"
+        "/deltask <id> — eliminar tarea\n\n"
+        "*Backlog*\n"
         "/backlog — ver ideas a largo plazo\n"
-        "/clear — borrar historial de conversacion\n"
+        "/idea <título> — agregar idea al backlog\n"
+        "/delidea <id> — eliminar idea del backlog\n\n"
+        "*Calendario*\n"
+        "/events — próximos eventos\n\n"
+        "*Tracking*\n"
+        "/track <actividad> — iniciar sesión de trabajo\n"
+        "/log <actividad> <inicio HH:MM> <fin HH:MM> — registrar bloque pasado\n\n"
+        "*General*\n"
+        "/status — resumen del día\n"
         "/login — autenticar Google Calendar\n"
-        "/help — este mensaje\n\n"
-        "O escribe directamente lo que necesitas.",
+        "/help — este mensaje",
         parse_mode="Markdown",
     )
 
@@ -104,9 +72,6 @@ async def login(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     try:
         await auth.await_login_result()
-        chat_id = update.effective_chat.id
-        _histories[chat_id].clear()
-        _pending.pop(chat_id, None)
         await update.message.reply_text("Autenticado. Google Calendar listo.")
     except RuntimeError as e:
         await update.message.reply_text(str(e))
@@ -119,7 +84,148 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(build_digest(), parse_mode="MarkdownV2")
 
 
+async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    tasks = list_tasks(show_done=False)
+    if not tasks:
+        await update.message.reply_text("No hay tareas pendientes.")
+        return
+    lines = [f"✅ {bold(f'Tareas ({len(tasks)})')}", SEP, ""]
+    for t in tasks:
+        due_part = f" _{esc(fmt_due(t['due']))}_" if t.get("due") else ""
+        lines.append(f"• \\#{t['doc_id']} {bold(t['title'])}{due_part}")
+        if t.get("notes"):
+            lines.append(f"  {italic(t['notes'])}")
+    lines += ["", italic("Usa /done \\<id\\> o /deltask \\<id\\>")]
+    await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+
+
+async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    title = " ".join(context.args) if context.args else ""
+    if not title:
+        await update.message.reply_text("Uso: /task <título>")
+        return
+    create_task(title)
+    await update.message.reply_text(f"✅ Tarea creada: {title}")
+
+
+async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Uso: /done <id>")
+        return
+    try:
+        doc_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("El id debe ser un número.")
+        return
+    try:
+        update_task(doc_id, done=True)
+        await update.message.reply_text("✅ Tarea completada.")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+
+async def deltask_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Uso: /deltask <id>")
+        return
+    try:
+        doc_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("El id debe ser un número.")
+        return
+    tasks = list_tasks(show_done=True)
+    task = next((t for t in tasks if t["doc_id"] == doc_id), None)
+    name = task["title"] if task else f"#{doc_id}"
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Eliminar", callback_data=f"deltask:yes:{doc_id}"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="deltask:no"),
+    ]])
+    await update.message.reply_text(
+        f"🗑 Eliminar tarea *{esc_md1(name)}*?",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
+
+
+async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        evs = list_events(max_results=5)
+    except Exception as e:
+        await update.message.reply_text(f"Error al obtener eventos: {e}")
+        return
+    if not evs:
+        await update.message.reply_text("No hay próximos eventos.")
+        return
+    lines = [f"📅 {bold('Próximos eventos')}", SEP, ""]
+    for ev in evs:
+        summary = ev.get("summary", "(sin título)")
+        start = ev.get("start", {})
+        start_str = start.get("dateTime") or start.get("date", "")
+        try:
+            if "T" in start_str:
+                dt = datetime.fromisoformat(start_str).astimezone(_tz.LIMA)
+                when = dt.strftime("%d/%m %H:%M")
+            else:
+                d = date.fromisoformat(start_str)
+                when = d.strftime("%d/%m")
+        except Exception:
+            when = start_str
+        lines.append(f"• {bold(summary)} — {esc(when)}")
+    await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+
+
+async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    items = list_backlog()
+    if not items:
+        await update.message.reply_text("No hay ideas en el backlog.")
+        return
+    lines = [f"💡 {bold(f'Backlog ({len(items)})')}", SEP, ""]
+    for item in items:
+        lines.append(f"• \\#{item['doc_id']} {bold(item['title'])}")
+        if item.get("description"):
+            lines.append(f"  {italic(item['description'])}")
+    lines += ["", italic("Usa /delidea \\<id\\> para eliminar")]
+    await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+
+
+async def idea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    text = " ".join(context.args) if context.args else ""
+    if not text:
+        await update.message.reply_text("Uso: /idea <título>  (o /idea <título> | <descripción>)")
+        return
+    if " | " in text:
+        title, desc = text.split(" | ", 1)
+    else:
+        title, desc = text, ""
+    create_backlog_item(title.strip(), description=desc.strip())
+    await update.message.reply_text(f"💡 Idea guardada: {title.strip()}")
+
+
+async def delidea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Uso: /delidea <id>")
+        return
+    try:
+        doc_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("El id debe ser un número.")
+        return
+    items = list_backlog()
+    item = next((i for i in items if i["doc_id"] == doc_id), None)
+    name = item["title"] if item else f"#{doc_id}"
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Eliminar", callback_data=f"delidea:yes:{doc_id}"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="delidea:no"),
+    ]])
+    await update.message.reply_text(
+        f"🗑 Eliminar idea *{esc_md1(name)}*?",
+        parse_mode="Markdown",
+        reply_markup=keyboard,
+    )
+
+
 async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    from callbacks import _pending_track, build_category_keyboard
     activity = " ".join(context.args) if context.args else ""
     if not activity:
         await update.message.reply_text("Uso: /track <actividad>")
@@ -134,7 +240,7 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Usage: /log <actividad> <HH:MM> <HH:MM>"""
+    from callbacks import _pending_log, build_category_keyboard
     args = context.args or []
     if len(args) < 3:
         await update.message.reply_text("Uso: /log <actividad> <inicio HH:MM> <fin HH:MM>")
@@ -169,65 +275,9 @@ async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     )
 
 
-async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    items = list_backlog()
-    if not items:
-        await update.message.reply_text("No hay ideas en el backlog.")
-        return
-    lines = [f"💡 {bold(f'Backlog ({len(items)})')}", SEP, ""]
-    for item in items:
-        lines.append(f"• {bold(item['title'])}")
-        if item.get("description"):
-            lines.append(f"  {italic(item['description'])}")
-    await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
-
-
-def clear_history(chat_id: int) -> None:
-    _histories[chat_id].clear()
-    _pending.pop(chat_id, None)
-
-
 async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    clear_history(chat_id)
-    await update.message.reply_text("Historial borrado.")
+    await update.message.reply_text("Listo.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.effective_chat.id
-    text = (update.message.text or "").strip()
-    if not text:
-        return
-
-    logger.info("Message from %s: %s", chat_id, text[:80])
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-
-    try:
-        result = await agent.process(text, _histories[chat_id])
-    except Exception as exc:
-        logger.exception("Agent error for message: %s", text[:80])
-        await update.message.reply_text(f"Error: {exc}")
-        return
-
-    if isinstance(result, ConfirmationRequest):
-        _pending[chat_id] = result
-        destructive = [c for c in result.pending_calls if c["name"] in REQUIRE_CONFIRMATION]
-        lines = [f"🗑 {bold('Confirmar eliminación')}", SEP, ""]
-        for call in destructive:
-            args = json.loads(call["args_json"])
-            lines.append(f"• {esc(_describe_call(call['name'], args))}")
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("✅ Confirmar", callback_data="confirm:yes"),
-            InlineKeyboardButton("❌ Cancelar", callback_data="confirm:no"),
-        ]])
-        await _reply(update.message, "\n".join(lines), parse_mode="MarkdownV2", reply_markup=keyboard)
-        return
-
-    await _reply(update.message, result)
-
-    if len(_histories[chat_id]) > 40:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="_(Historial largo — considera /clear si empiezas un tema nuevo)_",
-            parse_mode="Markdown",
-        )
+    await update.message.reply_text("No entiendo ese mensaje. Usa /help para ver los comandos disponibles.")

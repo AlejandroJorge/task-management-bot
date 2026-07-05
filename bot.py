@@ -10,7 +10,11 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 import auth
 import tracking_state
 from callbacks import handle_callback
-from handlers import backlog, clear, handle_message, help_command, log_command, login, start, status, track_command
+from handlers import (
+    backlog, clear, delidea_command, deltask_command, done_command,
+    events_command, handle_message, help_command, idea_command, log_command,
+    login, start, status, task_command, tasks_command, track_command,
+)
 from jobs import auth_check, digest_job, event_notifier, tracking_nudge_job, tracking_plan_job
 
 logging.basicConfig(
@@ -22,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def main() -> None:
-    _required = ["BOT_TOKEN", "ALLOWED_USER_ID", "DEEPSEEK_API_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
+    _required = ["BOT_TOKEN", "ALLOWED_USER_ID", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]
     if missing := [v for v in _required if not os.getenv(v)]:
         sys.exit(f"Missing required env vars: {', '.join(missing)}")
 
@@ -35,14 +39,21 @@ def main() -> None:
     app = Application.builder().token(token).build()
 
     # ── command handlers ──────────────────────────────────────────────────────
-    app.add_handler(CommandHandler("start",    start,        filters=me))
-    app.add_handler(CommandHandler("help",     help_command, filters=me))
-    app.add_handler(CommandHandler("clear",    clear,        filters=me))
-    app.add_handler(CommandHandler("login",    login,        filters=me))
-    app.add_handler(CommandHandler("status",   status,       filters=me))
-    app.add_handler(CommandHandler("backlog",  backlog,      filters=me))
-    app.add_handler(CommandHandler("track",    track_command, filters=me))
-    app.add_handler(CommandHandler("log",      log_command,   filters=me))
+    app.add_handler(CommandHandler("start",    start,           filters=me))
+    app.add_handler(CommandHandler("help",     help_command,    filters=me))
+    app.add_handler(CommandHandler("clear",    clear,           filters=me))
+    app.add_handler(CommandHandler("login",    login,           filters=me))
+    app.add_handler(CommandHandler("status",   status,          filters=me))
+    app.add_handler(CommandHandler("tasks",    tasks_command,   filters=me))
+    app.add_handler(CommandHandler("task",     task_command,    filters=me))
+    app.add_handler(CommandHandler("done",     done_command,    filters=me))
+    app.add_handler(CommandHandler("deltask",  deltask_command, filters=me))
+    app.add_handler(CommandHandler("events",   events_command,  filters=me))
+    app.add_handler(CommandHandler("backlog",  backlog,         filters=me))
+    app.add_handler(CommandHandler("idea",     idea_command,    filters=me))
+    app.add_handler(CommandHandler("delidea",  delidea_command, filters=me))
+    app.add_handler(CommandHandler("track",    track_command,   filters=me))
+    app.add_handler(CommandHandler("log",      log_command,     filters=me))
 
     # ── inline button callbacks ───────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(handle_callback))

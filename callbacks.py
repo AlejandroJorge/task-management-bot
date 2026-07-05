@@ -175,8 +175,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _handle_track(query, chat_id, context, parts[1:])
     elif ns == "log":
         await _handle_log(query, chat_id, parts[1:])
-    elif ns == "confirm":
-        await _handle_confirm(query, chat_id, context, parts[1] if len(parts) > 1 else "")
+    elif ns == "deltask":
+        await _handle_deltask(query, parts[1:])
+    elif ns == "delidea":
+        await _handle_delidea(query, parts[1:])
     elif ns == "task" and len(parts) >= 3:
         await _handle_task(query, parts[1], parts[2])
 
@@ -302,26 +304,34 @@ async def _handle_log(query, chat_id, args: list[str]) -> None:
         )
 
 
-# ── Confirm flow ──────────────────────────────────────────────────────────────
+# ── Delete flows ──────────────────────────────────────────────────────────────
 
-async def _handle_confirm(query, chat_id, context, action: str) -> None:
-    from handlers import _histories, _pending
-    import agent
-
-    request = _pending.pop(chat_id, None)
-    if not request:
-        await query.edit_message_text("No hay ninguna acción pendiente.")
+async def _handle_deltask(query, args: list[str]) -> None:
+    action = args[0] if args else ""
+    if action == "no":
+        await query.edit_message_text("Cancelado.")
         return
-    confirmed = action == "yes"
-    try:
-        reply = await agent.resume_after_confirmation(confirmed, request, _histories[chat_id])
-    except Exception as exc:
-        logger.exception("Error resuming after confirmation")
-        reply = f"Error: {exc}"
-    try:
-        await query.edit_message_text(reply or ("Cancelado." if not confirmed else "Listo."), parse_mode="Markdown")
-    except Exception:
-        await query.edit_message_text(reply or ("Cancelado." if not confirmed else "Listo."))
+    if action == "yes" and len(args) > 1:
+        from tasks_tools import delete_task
+        try:
+            delete_task(int(args[1]))
+            await query.edit_message_text("✅ Tarea eliminada.")
+        except Exception as e:
+            await query.edit_message_text(f"Error: {e}")
+
+
+async def _handle_delidea(query, args: list[str]) -> None:
+    action = args[0] if args else ""
+    if action == "no":
+        await query.edit_message_text("Cancelado.")
+        return
+    if action == "yes" and len(args) > 1:
+        from backlog_tools import delete_backlog_item
+        try:
+            delete_backlog_item(int(args[1]))
+            await query.edit_message_text("✅ Idea eliminada.")
+        except Exception as e:
+            await query.edit_message_text(f"Error: {e}")
 
 
 # ── Task flow ─────────────────────────────────────────────────────────────────
