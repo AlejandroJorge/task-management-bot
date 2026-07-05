@@ -61,7 +61,7 @@ def build_tracking_text(state: dict) -> str:
             if mins_rem > 0:
                 text += f"\nTermina a las {end_dt.strftime('%H:%M')} ({mins_rem} min restantes)"
             else:
-                text += "\n⚠️ Tiempo terminado — ¿extender o parar?"
+                text += f"\n⚠️ SOBRE EL TIEMPO — {fmt_duration(-mins_rem)} de más"
         except Exception:
             pass
     return text
@@ -71,6 +71,7 @@ def build_tracking_keyboard(state: dict) -> InlineKeyboardMarkup:
     if state.get("planned_end"):
         rows = [
             [
+                InlineKeyboardButton("−15 min", callback_data="track:extend:-15"),
                 InlineKeyboardButton("+15 min", callback_data="track:extend:15"),
                 InlineKeyboardButton("+30 min", callback_data="track:extend:30"),
             ],

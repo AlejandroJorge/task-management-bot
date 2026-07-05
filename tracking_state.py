@@ -115,7 +115,8 @@ def set_planned_end(minutes: int) -> None:
 
 
 def extend_planned(minutes: int) -> None:
-    """Add minutes to the current planned end. If it already passed, extend from now."""
+    """Add (or subtract) minutes on the current planned end. If it already
+    passed, count from now. Never leaves less than 1 minute remaining."""
     global _state
     if not _state.get("active"):
         raise ValueError("No hay sesión activa.")
@@ -127,11 +128,13 @@ def extend_planned(minutes: int) -> None:
     except ValueError:
         base = now
     new_end = max(base, now) + timedelta(minutes=minutes)
+    new_end = max(new_end, now + timedelta(minutes=1))
     _state["planned_end"] = new_end.isoformat()
-    _state["plan_warned"] = False
+    # If the user deliberately left <=5 min, don't ping the 5-min warning again
+    _state["plan_warned"] = new_end - now <= timedelta(minutes=5)
     _state["plan_ended"] = False
     save_state()
-    logger.info("Planned end extended: +%d min → %s", minutes, new_end.strftime("%H:%M"))
+    logger.info("Planned end extended: %+d min → %s", minutes, new_end.strftime("%H:%M"))
 
 
 def clear_planned_end() -> None:
