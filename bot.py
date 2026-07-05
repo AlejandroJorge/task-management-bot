@@ -11,9 +11,10 @@ import auth
 import tracking_state
 from callbacks import handle_callback
 from handlers import (
-    backlog, delidea_command, deltask_command, done_command,
-    events_command, handle_message, help_command, idea_command, log_command,
-    login, start, status, task_command, tasks_command, track_command,
+    backlog, blocks_command, delblock_command, delidea_command, deltask_command,
+    done_command, editblock_command, events_command, handle_message, help_command,
+    idea_command, log_command, login, start, status, task_command, tasks_command,
+    track_command,
 )
 from jobs import auth_check, digest_job, event_notifier, tracking_minutely_job, tracking_nudge_job
 
@@ -53,6 +54,9 @@ def main() -> None:
     app.add_handler(CommandHandler("delidea",  delidea_command, filters=me))
     app.add_handler(CommandHandler("track",    track_command,   filters=me))
     app.add_handler(CommandHandler("log",      log_command,     filters=me))
+    app.add_handler(CommandHandler("blocks",   blocks_command,  filters=me))
+    app.add_handler(CommandHandler("delblock", delblock_command, filters=me))
+    app.add_handler(CommandHandler("editblock", editblock_command, filters=me))
 
     # ── inline button callbacks ───────────────────────────────────────────────
     app.add_handler(CallbackQueryHandler(handle_callback))

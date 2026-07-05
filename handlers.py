@@ -11,6 +11,7 @@ from calendar_tools import list_events
 from digest import build_digest
 from formatting import SEP, bold, esc, esc_md1, fmt_due, fmt_duration, italic
 from tasks_tools import create_task, list_tasks, update_task
+from tracking_tools import delete_timeblock, list_timeblocks, update_timeblock
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "*Tracking*\n"
         "Escribe cualquier texto — iniciar (o cambiar de) actividad al instante\n"
         "/track <actividad> — iniciar sesión eligiendo categoría y duración\n"
-        "/log <actividad> <inicio HH:MM> <fin HH:MM> — registrar bloque pasado\n\n"
+        "/log <actividad> <inicio HH:MM> <fin HH:MM> — registrar bloque pasado\n"
+        "/blocks — listar bloques de hoy\n"
+        "/delblock <n> — eliminar bloque\n"
+        "/editblock <n> <inicio HH:MM> <fin HH:MM> — cambiar horario de un bloque\n\n"
         "*General*\n"
         "/status — resumen del día\n"
         "/login — autenticar Google Calendar\n"
@@ -217,39 +221,136 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+def _parse_today_range(start_str: str, end_str: str) -> tuple[str, str]:
+    """Parse two HH:MM strings as today's Lima times. Returns ISO strings.
+    Raises ValueError with a user-facing message."""
+    today = _tz.now().date()
+    try:
+        start_dt = datetime.strptime(start_str, "%H:%M").replace(
+            year=today.year, month=today.month, day=today.day, tzinfo=_tz.LIMA
+        )
+        end_dt = datetime.strptime(end_str, "%H:%M").replace(
+            year=today.year, month=today.month, day=today.day, tzinfo=_tz.LIMA
+        )
+    except ValueError:
+        raise ValueError("Formato de hora inválido. Usa HH:MM, ej: 10:00 11:30")
+    if end_dt <= start_dt:
+        raise ValueError("La hora de fin debe ser posterior a la de inicio.")
+    return start_dt.isoformat(), end_dt.isoformat()
+
+
 async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     from callbacks import _pending_log, build_category_keyboard
     args = context.args or []
     if len(args) < 3:
         await update.message.reply_text("Uso: /log <actividad> <inicio HH:MM> <fin HH:MM>")
         return
-    start_str, end_str = args[-2], args[-1]
     activity = " ".join(args[:-2])
     try:
-        today = _tz.now().date()
-        tz = _tz.LIMA
-        start_dt = datetime.strptime(start_str, "%H:%M").replace(
-            year=today.year, month=today.month, day=today.day, tzinfo=tz
-        )
-        end_dt = datetime.strptime(end_str, "%H:%M").replace(
-            year=today.year, month=today.month, day=today.day, tzinfo=tz
-        )
-    except ValueError:
-        await update.message.reply_text("Formato de hora inválido. Usa HH:MM, ej: /log Proyecto 10:00 11:30")
-        return
-    if end_dt <= start_dt:
-        await update.message.reply_text("La hora de fin debe ser posterior a la de inicio.")
+        start_iso, end_iso = _parse_today_range(args[-2], args[-1])
+    except ValueError as e:
+        await update.message.reply_text(str(e))
         return
     chat_id = update.effective_chat.id
     _pending_log[chat_id] = {
         "activity": activity,
-        "start": start_dt.isoformat(),
-        "end": end_dt.isoformat(),
+        "start": start_iso,
+        "end": end_iso,
     }
     await update.message.reply_text(
         f"🏷 Categoría para *{esc_md1(activity)}*:",
         reply_markup=build_category_keyboard("log:cat"),
         parse_mode="Markdown",
+    )
+
+
+def _todays_blocks() -> list[dict]:
+    """Today's timeblocks in chronological order; index+1 is the user-facing number."""
+    now = _tz.now()
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return list_timeblocks(day_start.isoformat(), now.isoformat())
+
+
+def _fmt_block(b: dict) -> str:
+    s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
+    e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
+    return f"{s.strftime('%H:%M')}–{e.strftime('%H:%M')} {b['activity']}"
+
+
+async def blocks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        blocks = _todays_blocks()
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+        return
+    if not blocks:
+        await update.message.reply_text("No hay bloques registrados hoy.")
+        return
+    lines = [f"⏱ {bold(f'Bloques de hoy ({len(blocks)})')}", SEP, ""]
+    for i, b in enumerate(blocks, 1):
+        s = datetime.fromisoformat(b["start"]).astimezone(_tz.LIMA)
+        e = datetime.fromisoformat(b["end"]).astimezone(_tz.LIMA)
+        mins = round((e - s).total_seconds() / 60)
+        lines.append(
+            f"{i}\\. {esc(s.strftime('%H:%M'))}–{esc(e.strftime('%H:%M'))} "
+            f"{bold(b['activity'])} _{esc(fmt_duration(mins))}_"
+        )
+    lines += ["", italic("Usa /delblock \\<n\\> o /editblock \\<n\\> \\<inicio\\> \\<fin\\>")]
+    await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
+
+
+async def _pick_block(update: Update, arg: str) -> dict | None:
+    """Resolve a /blocks number to a block, replying with the error if invalid."""
+    try:
+        n = int(arg)
+    except ValueError:
+        await update.message.reply_text("El número debe ser un entero (ver /blocks).")
+        return None
+    try:
+        blocks = _todays_blocks()
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+        return None
+    if not 1 <= n <= len(blocks):
+        await update.message.reply_text(f"No existe el bloque {n}. Hoy hay {len(blocks)} (ver /blocks).")
+        return None
+    return blocks[n - 1]
+
+
+async def delblock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Uso: /delblock <n>  (número según /blocks)")
+        return
+    block = await _pick_block(update, context.args[0])
+    if block is None:
+        return
+    try:
+        delete_timeblock(block["event_id"])
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+        return
+    await update.message.reply_text(f"🗑 Bloque eliminado: {_fmt_block(block)}")
+
+
+async def editblock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = context.args or []
+    if len(args) != 3:
+        await update.message.reply_text("Uso: /editblock <n> <inicio HH:MM> <fin HH:MM>")
+        return
+    block = await _pick_block(update, args[0])
+    if block is None:
+        return
+    try:
+        start_iso, end_iso = _parse_today_range(args[1], args[2])
+        update_timeblock(block["event_id"], start=start_iso, end=end_iso)
+    except ValueError as e:
+        await update.message.reply_text(str(e))
+        return
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+        return
+    await update.message.reply_text(
+        f"✏️ Bloque actualizado: {args[1]}–{args[2]} {block['activity']} (antes {_fmt_block(block)})"
     )
 
 

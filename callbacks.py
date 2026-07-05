@@ -7,8 +7,12 @@ callback_data format: namespace:action[:arg...]
   track:plan:<min>           — set planned end on active session
   track:extend:<min>         — extend planned end on active session
   track:stop                 — stop active session
+  track:unplan               — make active session open-ended again
   track:recat                — show category picker on active session
   track:setcat:<category>    — set category on active session
+  track:backdate             — show "started earlier" picker on active session
+  track:setstart:<min>       — move session start to <min> minutes ago
+  track:refresh              — re-render the status message
   log:cat:<category>         — category selected (pending log flow)
   deltask:yes:<doc_id> / deltask:no — task deletion confirmation
   delidea:yes:<doc_id> / delidea:no — backlog deletion confirmation
@@ -85,11 +89,16 @@ def build_tracking_text(state: dict) -> str:
 
 def build_tracking_keyboard(state: dict) -> InlineKeyboardMarkup:
     if state.get("planned_end"):
-        rows = [[
-            InlineKeyboardButton("+15 min", callback_data="track:extend:15"),
-            InlineKeyboardButton("+30 min", callback_data="track:extend:30"),
-            InlineKeyboardButton("⏹ Parar", callback_data="track:stop"),
-        ]]
+        rows = [
+            [
+                InlineKeyboardButton("+15 min", callback_data="track:extend:15"),
+                InlineKeyboardButton("+30 min", callback_data="track:extend:30"),
+            ],
+            [
+                InlineKeyboardButton("♾ Sin límite", callback_data="track:unplan"),
+                InlineKeyboardButton("⏹ Parar", callback_data="track:stop"),
+            ],
+        ]
     else:
         rows = [
             [
@@ -99,9 +108,26 @@ def build_tracking_keyboard(state: dict) -> InlineKeyboardMarkup:
             ],
             [InlineKeyboardButton("⏹ Parar", callback_data="track:stop")],
         ]
+    extras = [InlineKeyboardButton("⏪ Empezó antes", callback_data="track:backdate")]
     if state.get("category", "unclassified") == "unclassified":
-        rows.append([InlineKeyboardButton("🏷 Categoría", callback_data="track:recat")])
+        extras.insert(0, InlineKeyboardButton("🏷 Categoría", callback_data="track:recat"))
+    rows.append(extras)
     return InlineKeyboardMarkup(rows)
+
+
+def build_backdate_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("hace 5 min",  callback_data="track:setstart:5"),
+            InlineKeyboardButton("hace 10 min", callback_data="track:setstart:10"),
+            InlineKeyboardButton("hace 15 min", callback_data="track:setstart:15"),
+        ],
+        [
+            InlineKeyboardButton("hace 30 min", callback_data="track:setstart:30"),
+            InlineKeyboardButton("hace 1 hora", callback_data="track:setstart:60"),
+            InlineKeyboardButton("↩ Volver",    callback_data="track:refresh"),
+        ],
+    ])
 
 
 # ── Status message helpers ────────────────────────────────────────────────────
@@ -225,6 +251,31 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
             msg = await context.bot.send_message(chat_id=chat_id, text=done_text, parse_mode="Markdown")
             tracking_state.set_status_message_id(msg.message_id)
 
+    elif action == "unplan":
+        try:
+            tracking_state.clear_planned_end()
+        except ValueError as e:
+            await query.answer(str(e), show_alert=True)
+            return
+        await _show_active_session(query)
+
+    elif action == "backdate":
+        await query.edit_message_reply_markup(reply_markup=build_backdate_keyboard())
+
+    elif action == "setstart" and args[1:]:
+        try:
+            old_start, new_start = tracking_state.backdate_start(int(args[1]))
+        except ValueError as e:
+            await query.answer(str(e), show_alert=True)
+            return
+        note = _resolve_overlaps(new_start, old_start)
+        if note:
+            await query.answer(f"Bloques ajustados: {note}", show_alert=False)
+        await _show_active_session(query)
+
+    elif action == "refresh":
+        await _show_active_session(query)
+
     elif action == "recat":
         # Swap the keyboard for the category picker; text stays as-is
         await query.edit_message_reply_markup(reply_markup=build_category_keyboard("track:setcat"))
@@ -292,6 +343,31 @@ async def _handle_delete(query, args: list[str], delete_fn, ok_text: str) -> Non
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _resolve_overlaps(new_start: str, old_start: str) -> str | None:
+    """After backdating a session, trim or remove logged timeblocks that the
+    session now covers ('forgot to stop X before starting Y'). Returns a short
+    summary of what was adjusted, or None."""
+    from tracking_tools import delete_timeblock, list_timeblocks, update_timeblock
+    ns = datetime.fromisoformat(new_start)
+    if ns >= datetime.fromisoformat(old_start):
+        return None  # start moved forward — session shrank, nothing to resolve
+    try:
+        notes = []
+        for b in list_timeblocks(new_start, old_start):
+            if datetime.fromisoformat(b["end"]) <= ns:
+                continue
+            if datetime.fromisoformat(b["start"]) < ns:
+                update_timeblock(b["event_id"], end=new_start)
+                notes.append(f"{b['activity']} recortado")
+            else:
+                delete_timeblock(b["event_id"])
+                notes.append(f"{b['activity']} eliminado")
+        return ", ".join(notes) or None
+    except Exception:
+        logger.exception("Failed to resolve overlaps after backdate")
+        return None
+
+
 def _create_timeblock_safe(final: dict) -> None:
     try:
         create_timeblock(
@@ -308,6 +384,6 @@ def _elapsed(final: dict) -> int:
     try:
         start = datetime.fromisoformat(final["started_at"])
         end = datetime.fromisoformat(final.get("ended_at", final.get("end", "")))
-        return max(0, int((end - start).total_seconds() / 60))
+        return max(0, round((end - start).total_seconds() / 60))
     except Exception:
         return 0

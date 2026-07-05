@@ -48,13 +48,13 @@ def get_state() -> dict:
         now = _tz.now()
         try:
             started = datetime.fromisoformat(state["started_at"])
-            state["elapsed_minutes"] = max(0, int((now - started).total_seconds() / 60))
+            state["elapsed_minutes"] = max(0, round((now - started).total_seconds() / 60))
         except Exception:
             state["elapsed_minutes"] = 0
         if state.get("planned_end"):
             try:
                 planned_end = datetime.fromisoformat(state["planned_end"])
-                state["minutes_remaining"] = int((planned_end - now).total_seconds() / 60)
+                state["minutes_remaining"] = round((planned_end - now).total_seconds() / 60)
             except Exception:
                 pass
     return state
@@ -113,6 +113,30 @@ def set_planned_end(minutes: int) -> None:
     _state["plan_ended"] = False
     save_state()
     logger.info("Planned end set: %d min → %s", minutes, planned_end.strftime("%H:%M"))
+
+
+def clear_planned_end() -> None:
+    global _state
+    if not _state.get("active"):
+        raise ValueError("No hay sesión activa.")
+    _state["planned_end"] = None
+    _state["plan_warned"] = False
+    _state["plan_ended"] = False
+    save_state()
+    logger.info("Planned end cleared — session is now open-ended")
+
+
+def backdate_start(minutes: int) -> tuple[str, str]:
+    """Set started_at to now - minutes. Returns (old_start, new_start) as ISO strings."""
+    global _state
+    if not _state.get("active"):
+        raise ValueError("No hay sesión activa.")
+    old_start = _state["started_at"]
+    new_start = (_tz.now() - timedelta(minutes=minutes)).isoformat()
+    _state["started_at"] = new_start
+    save_state()
+    logger.info("Start backdated %d min: %s → %s", minutes, old_start, new_start)
+    return old_start, new_start
 
 
 def set_category(category: str) -> None:
