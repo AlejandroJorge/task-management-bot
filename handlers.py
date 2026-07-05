@@ -39,7 +39,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "*Calendario*\n"
         "/events — próximos eventos\n\n"
         "*Tracking*\n"
-        "Escribe cualquier texto — iniciar (o cambiar de) actividad al instante\n"
+        "Responde al mensaje de tracking — iniciar (o cambiar de) actividad al instante\n"
         "/track <actividad> — iniciar sesión eligiendo duración\n"
         "/log <actividad> <inicio HH:MM> <fin HH:MM> — registrar bloque pasado\n"
         "/blocks — listar bloques de hoy\n"
@@ -356,8 +356,9 @@ async def editblock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Free text is an activity name: start tracking it immediately (open-ended,
-    unclassified). If a session is already active, log it first and switch."""
+    """Replying to the tracking status message with plain text starts that activity
+    immediately (open-ended). If a session is already active, log it first and
+    switch. Any other free text just gets a pointer to /help."""
     import tracking_state
     from callbacks import _create_timeblock_safe, _elapsed, send_tracking_status
 
@@ -365,6 +366,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not activity:
         return
     chat_id = update.effective_chat.id
+
+    reply_to = update.message.reply_to_message
+    status_id = tracking_state.get_state().get("status_message_id")
+    if reply_to is None or reply_to.message_id != status_id:
+        await update.message.reply_text(
+            "No entiendo ese mensaje. Responde al mensaje de tracking para "
+            "iniciar o cambiar de actividad, o usa /help."
+        )
+        return
 
     state = tracking_state.get_state()
     if state.get("active"):
