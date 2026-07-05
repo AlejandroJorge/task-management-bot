@@ -15,15 +15,6 @@ from tasks_tools import create_task, list_tasks, update_task
 logger = logging.getLogger(__name__)
 
 
-async def _reply(message, text: str, parse_mode: str = "Markdown", reply_markup=None) -> None:
-    logger.info("Sending reply: %s", text.splitlines()[0][:120] if text else "(empty)")
-    try:
-        await message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
-    except Exception:
-        logger.warning("Markdown parse failed, retrying as plain text")
-        await message.reply_text(text, reply_markup=reply_markup)
-
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Hola. Soy tu asistente personal.\n"
@@ -124,27 +115,32 @@ async def done_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text(f"Error: {e}")
 
 
-async def deltask_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def _confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                          namespace: str, noun: str, items: list[dict]) -> None:
+    """Shared /deltask and /delidea flow: validate id, ask for confirmation."""
     if not context.args:
-        await update.message.reply_text("Uso: /deltask <id>")
+        await update.message.reply_text(f"Uso: /{namespace} <id>")
         return
     try:
         doc_id = int(context.args[0])
     except ValueError:
         await update.message.reply_text("El id debe ser un número.")
         return
-    tasks = list_tasks(show_done=True)
-    task = next((t for t in tasks if t["doc_id"] == doc_id), None)
-    name = task["title"] if task else f"#{doc_id}"
+    item = next((i for i in items if i["doc_id"] == doc_id), None)
+    name = item["title"] if item else f"#{doc_id}"
     keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Eliminar", callback_data=f"deltask:yes:{doc_id}"),
-        InlineKeyboardButton("❌ Cancelar", callback_data="deltask:no"),
+        InlineKeyboardButton("✅ Eliminar", callback_data=f"{namespace}:yes:{doc_id}"),
+        InlineKeyboardButton("❌ Cancelar", callback_data=f"{namespace}:no"),
     ]])
     await update.message.reply_text(
-        f"🗑 Eliminar tarea *{esc_md1(name)}*?",
+        f"🗑 Eliminar {noun} *{esc_md1(name)}*?",
         parse_mode="Markdown",
         reply_markup=keyboard,
     )
+
+
+async def deltask_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _confirm_delete(update, context, "deltask", "tarea", list_tasks(show_done=True))
 
 
 async def events_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -202,26 +198,7 @@ async def idea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def delidea_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Uso: /delidea <id>")
-        return
-    try:
-        doc_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text("El id debe ser un número.")
-        return
-    items = list_backlog()
-    item = next((i for i in items if i["doc_id"] == doc_id), None)
-    name = item["title"] if item else f"#{doc_id}"
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton("✅ Eliminar", callback_data=f"delidea:yes:{doc_id}"),
-        InlineKeyboardButton("❌ Cancelar", callback_data="delidea:no"),
-    ]])
-    await update.message.reply_text(
-        f"🗑 Eliminar idea *{esc_md1(name)}*?",
-        parse_mode="Markdown",
-        reply_markup=keyboard,
-    )
+    await _confirm_delete(update, context, "delidea", "idea", list_backlog())
 
 
 async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -273,10 +250,6 @@ async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         reply_markup=build_category_keyboard("log:cat"),
         parse_mode="Markdown",
     )
-
-
-async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Listo.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

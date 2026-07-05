@@ -1,7 +1,7 @@
 { pkgs ? import<nixpkgs> {} }:
 pkgs.mkShell {
-	buildInputs = import pkgs; [ 
-    uv 
-    pyright
+	buildInputs = [ 
+    pkgs.uv 
+    pkgs.pyright
   ];
 }

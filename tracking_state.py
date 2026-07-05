@@ -36,6 +36,12 @@ def save_state() -> None:
         logger.warning("TRACKING STATE NOT PERSISTED", exc_info=True)
 
 
+def reset() -> None:
+    global _state
+    _state = {"active": False, "status_message_id": None}
+    save_state()
+
+
 def get_state() -> dict:
     state = dict(_state)
     if state.get("active") and state.get("started_at"):
@@ -107,18 +113,6 @@ def set_planned_end(minutes: int) -> None:
     _state["plan_ended"] = False
     save_state()
     logger.info("Planned end set: %d min → %s", minutes, planned_end.strftime("%H:%M"))
-
-
-def extend_planned(minutes: int) -> None:
-    global _state
-    if not _state.get("active"):
-        raise ValueError("No hay sesión activa.")
-    new_end = _tz.now() + timedelta(minutes=minutes)
-    _state["planned_end"] = new_end.isoformat()
-    _state["plan_warned"] = False
-    _state["plan_ended"] = False
-    save_state()
-    logger.info("Tracking extended: +%d min → %s", minutes, new_end.strftime("%H:%M"))
 
 
 def set_status_message_id(mid: int | None) -> None:

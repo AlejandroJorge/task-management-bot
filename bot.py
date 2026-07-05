@@ -11,7 +11,7 @@ import auth
 import tracking_state
 from callbacks import handle_callback
 from handlers import (
-    backlog, clear, delidea_command, deltask_command, done_command,
+    backlog, delidea_command, deltask_command, done_command,
     events_command, handle_message, help_command, idea_command, log_command,
     login, start, status, task_command, tasks_command, track_command,
 )
@@ -41,7 +41,6 @@ def main() -> None:
     # ── command handlers ──────────────────────────────────────────────────────
     app.add_handler(CommandHandler("start",    start,           filters=me))
     app.add_handler(CommandHandler("help",     help_command,    filters=me))
-    app.add_handler(CommandHandler("clear",    clear,           filters=me))
     app.add_handler(CommandHandler("login",    login,           filters=me))
     app.add_handler(CommandHandler("status",   status,          filters=me))
     app.add_handler(CommandHandler("tasks",    tasks_command,   filters=me))
@@ -82,25 +81,19 @@ def main() -> None:
 
     async def on_startup(app):
         await auth.start_callback_server()
-        if auth.load_saved_token():
-            logger.info("Refresh token restored from DB.")
+        auth.load_saved_token()
+        restart_msg = "He sido reiniciado."
         state = tracking_state.load_state()
         if state.get("active"):
-            logger.info("Tracking session restored: %s", state.get("activity"))
             try:
                 started = datetime.fromisoformat(state["started_at"]).astimezone(_tz.LIMA)
-                restart_msg = (
-                    f"He sido reiniciado. "
-                    f"Sesión en curso restaurada: {state['activity']} "
-                    f"(desde las {started.strftime('%H:%M')})."
+                restart_msg += (
+                    f" Sesión en curso restaurada: {state['activity']}"
+                    f" (desde las {started.strftime('%H:%M')})."
                 )
             except Exception:
                 logger.warning("Corrupt tracking state on startup, resetting to inactive")
-                tracking_state._state = {"active": False, "status_message_id": None}
-                tracking_state.save_state()
-                restart_msg = "He sido reiniciado."
-        else:
-            restart_msg = "He sido reiniciado."
+                tracking_state.reset()
         await app.bot.send_message(chat_id=chat_id, text=restart_msg)
 
     async def on_shutdown(app):

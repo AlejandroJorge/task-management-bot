@@ -16,11 +16,3 @@ def load_categories() -> dict:
 def color_id_for(category: str) -> str | None:
     cat = load_categories().get(category)
     return cat["color_id"] if cat else None
-
-
-def categories_for_prompt() -> str:
-    cats = load_categories()
-    lines = ["Categorías para timeblocks (usa la key exacta al llamar herramientas):"]
-    for key, cat in cats.items():
-        lines.append(f"  - {key}: {cat['label']} — {cat['description']}")
-    return "\n".join(lines)

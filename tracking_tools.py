@@ -37,10 +37,6 @@ def _check_collision(start: str, end: str, exclude_id: str | None = None) -> Non
         raise ValueError(f"Conflicto con bloque existente: {names}")
 
 
-def get_timeblock(event_id: str) -> dict:
-    return _service().events().get(calendarId=_get_calendar_id(_TRACKING), eventId=event_id).execute()
-
-
 def create_timeblock(activity: str, start: str, end: str, notes: str = "", category: str = "unclassified") -> dict:
     dt_start = _assert_past(start, "Inicio")
     dt_end = _assert_past(end, "Fin")

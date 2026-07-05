@@ -61,10 +61,6 @@ def _service():
     return build("calendar", "v3", credentials=creds)
 
 
-def get_event(event_id: str) -> dict:
-    return _service().events().get(calendarId=_get_calendar_id(_EVENTOS), eventId=event_id).execute()
-
-
 def create_event(
     summary: str,
     start: str,

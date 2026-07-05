@@ -13,10 +13,5 @@ def list_backlog() -> list[dict]:
     return db_list(DB_PATH)
 
 
-def update_backlog_item(doc_id: int, **fields) -> None:
-    allowed = {k: fields[k] for k in ("title", "description") if k in fields}
-    db_update(DB_PATH, doc_id, allowed)
-
-
 def delete_backlog_item(doc_id: int) -> None:
     db_remove(DB_PATH, doc_id)

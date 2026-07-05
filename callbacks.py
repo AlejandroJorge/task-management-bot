@@ -8,8 +8,8 @@ callback_data format: namespace:action[:arg...]
   track:extend:<min>         — extend planned end on active session
   track:stop                 — stop active session
   log:cat:<category>         — category selected (pending log flow)
-  confirm:yes / confirm:no   — destructive action confirmation
-  task:done:<doc_id>         — mark task complete
+  deltask:yes:<doc_id> / deltask:no — task deletion confirmation
+  delidea:yes:<doc_id> / delidea:no — backlog deletion confirmation
 """
 
 import logging
@@ -139,26 +139,20 @@ async def send_tracking_status(bot, chat_id: int | str, notify: bool = True) -> 
         text = "¿Qué estás haciendo?"
         keyboard = _libre_keyboard()
 
-    if notify:
-        if msg_id:
-            try:
+    if msg_id:
+        try:
+            if notify:
                 await bot.delete_message(chat_id=chat_id, message_id=msg_id)
-            except Exception:
-                pass
-        msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown")
-        tracking_state.set_status_message_id(msg.message_id)
-    else:
-        if msg_id:
-            try:
+            else:
                 await bot.edit_message_text(
                     chat_id=chat_id, message_id=msg_id,
                     text=text, reply_markup=keyboard, parse_mode="Markdown",
                 )
                 return
-            except Exception:
-                pass
-        msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown")
-        tracking_state.set_status_message_id(msg.message_id)
+        except Exception:
+            pass
+    msg = await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="Markdown")
+    tracking_state.set_status_message_id(msg.message_id)
 
 
 # ── Main callback dispatcher ──────────────────────────────────────────────────
@@ -176,14 +170,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     elif ns == "log":
         await _handle_log(query, chat_id, parts[1:])
     elif ns == "deltask":
-        await _handle_deltask(query, parts[1:])
+        from tasks_tools import delete_task
+        await _handle_delete(query, parts[1:], delete_task, "Tarea eliminada")
     elif ns == "delidea":
-        await _handle_delidea(query, parts[1:])
-    elif ns == "task" and len(parts) >= 3:
-        await _handle_task(query, parts[1], parts[2])
+        from backlog_tools import delete_backlog_item
+        await _handle_delete(query, parts[1:], delete_backlog_item, "Idea eliminada")
 
 
 # ── Track flow ────────────────────────────────────────────────────────────────
+
+async def _show_active_session(query) -> None:
+    """Render the active session on the tapped message and make it the status message."""
+    state = tracking_state.get_state()
+    await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
+    tracking_state.set_status_message_id(query.message.message_id)
+
 
 async def _handle_track(query, chat_id, context, args: list[str]) -> None:
     action = args[0] if args else ""
@@ -220,9 +221,7 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
                 tracking_state.set_planned_end(int(minutes_arg))
             except Exception:
                 pass
-        state = tracking_state.get_state()
-        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
-        tracking_state.set_status_message_id(query.message.message_id)
+        await _show_active_session(query)
 
     elif action == "quickstart":
         # One-tap restart of a recent activity (from libre widget)
@@ -235,9 +234,7 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
         except ValueError as e:
             await query.answer(str(e), show_alert=True)
             return
-        state = tracking_state.get_state()
-        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
-        tracking_state.set_status_message_id(query.message.message_id)
+        await _show_active_session(query)
 
     elif action == "stop":
         try:
@@ -257,23 +254,14 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
             msg = await context.bot.send_message(chat_id=chat_id, text=done_text, reply_markup=keyboard, parse_mode="Markdown")
             tracking_state.set_status_message_id(msg.message_id)
 
-    elif action == "plan" and args[1:]:
+    elif action in ("plan", "extend") and args[1:]:
+        # Both set planned_end to now + minutes; only the button label differs.
         try:
             tracking_state.set_planned_end(int(args[1]))
         except ValueError as e:
             await query.answer(str(e), show_alert=True)
             return
-        state = tracking_state.get_state()
-        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
-
-    elif action == "extend" and args[1:]:
-        try:
-            tracking_state.extend_planned(int(args[1]))
-        except ValueError as e:
-            await query.answer(str(e), show_alert=True)
-            return
-        state = tracking_state.get_state()
-        await query.edit_message_text(build_tracking_text(state), reply_markup=build_tracking_keyboard(state), parse_mode="Markdown")
+        await _show_active_session(query)
 
 
 # ── Log flow ──────────────────────────────────────────────────────────────────
@@ -306,45 +294,17 @@ async def _handle_log(query, chat_id, args: list[str]) -> None:
 
 # ── Delete flows ──────────────────────────────────────────────────────────────
 
-async def _handle_deltask(query, args: list[str]) -> None:
+async def _handle_delete(query, args: list[str], delete_fn, ok_text: str) -> None:
     action = args[0] if args else ""
     if action == "no":
         await query.edit_message_text("Cancelado.")
         return
     if action == "yes" and len(args) > 1:
-        from tasks_tools import delete_task
         try:
-            delete_task(int(args[1]))
-            await query.edit_message_text("✅ Tarea eliminada.")
+            delete_fn(int(args[1]))
+            await query.edit_message_text(f"✅ {ok_text}.")
         except Exception as e:
             await query.edit_message_text(f"Error: {e}")
-
-
-async def _handle_delidea(query, args: list[str]) -> None:
-    action = args[0] if args else ""
-    if action == "no":
-        await query.edit_message_text("Cancelado.")
-        return
-    if action == "yes" and len(args) > 1:
-        from backlog_tools import delete_backlog_item
-        try:
-            delete_backlog_item(int(args[1]))
-            await query.edit_message_text("✅ Idea eliminada.")
-        except Exception as e:
-            await query.edit_message_text(f"Error: {e}")
-
-
-# ── Task flow ─────────────────────────────────────────────────────────────────
-
-async def _handle_task(query, action: str, raw_id: str) -> None:
-    if action == "done":
-        from tasks_tools import update_task
-        try:
-            update_task(int(raw_id), done=True)
-            await query.answer("✅ Tarea completada")
-            await query.edit_message_reply_markup(reply_markup=None)
-        except Exception as e:
-            await query.answer(str(e), show_alert=True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

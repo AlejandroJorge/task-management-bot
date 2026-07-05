@@ -35,11 +35,7 @@ async def auth_check(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def digest_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    from handlers import clear_history
-    chat_id = context.job.data
-    clear_history(chat_id)
-    text = build_digest()
-    await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="MarkdownV2")
+    await context.bot.send_message(chat_id=context.job.data, text=build_digest(), parse_mode="MarkdownV2")
 
 
 async def tracking_nudge_job(context: ContextTypes.DEFAULT_TYPE) -> None:
