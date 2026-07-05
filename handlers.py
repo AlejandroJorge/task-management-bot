@@ -102,7 +102,7 @@ async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             lines.append(f"  {italic(t['notes'])}")
         if t.get("first_step"):
             lines.append(f"  ▸ {esc(t['first_step'])}")
-    lines += ["", italic("Usa /done \\<n\\>, /deltask \\<n\\> o /taskstep \\<n\\> \\<primer paso\\>")]
+    lines += ["", italic("Usa /done <n>, /deltask <n> o /taskstep <n> <primer paso>")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
@@ -301,7 +301,7 @@ async def backlog(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             lines.append(f"  ▸ {esc(item['next_step'])}")
         else:
             lines.append(f"  ⚠ {italic('sin primer paso')}")
-    lines += ["", italic("Usa /step \\<n\\> \\<primer paso\\> o /delidea \\<n\\>")]
+    lines += ["", italic("Usa /step <n> <primer paso> o /delidea <n>")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
@@ -422,7 +422,7 @@ async def blocks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             f"{i}\\. {esc(s.strftime('%H:%M'))}–{esc(e.strftime('%H:%M'))} "
             f"{bold(b['activity'])} _{esc(fmt_duration(mins))}_"
         )
-    lines += ["", italic("Usa /delblock \\<n\\> o /editblock \\<n\\> \\<inicio\\> \\<fin\\>")]
+    lines += ["", italic("Usa /delblock <n> o /editblock <n> <inicio> <fin>")]
     await update.message.reply_text("\n".join(lines), parse_mode="MarkdownV2")
 
 
