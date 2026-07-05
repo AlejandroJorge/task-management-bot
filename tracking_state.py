@@ -114,6 +114,26 @@ def set_planned_end(minutes: int) -> None:
     logger.info("Planned end set: %d min → %s", minutes, planned_end.strftime("%H:%M"))
 
 
+def extend_planned(minutes: int) -> None:
+    """Add minutes to the current planned end. If it already passed, extend from now."""
+    global _state
+    if not _state.get("active"):
+        raise ValueError("No hay sesión activa.")
+    if not _state.get("planned_end"):
+        raise ValueError("No hay tiempo límite fijado.")
+    now = _tz.now()
+    try:
+        base = datetime.fromisoformat(_state["planned_end"])
+    except ValueError:
+        base = now
+    new_end = max(base, now) + timedelta(minutes=minutes)
+    _state["planned_end"] = new_end.isoformat()
+    _state["plan_warned"] = False
+    _state["plan_ended"] = False
+    save_state()
+    logger.info("Planned end extended: +%d min → %s", minutes, new_end.strftime("%H:%M"))
+
+
 def clear_planned_end() -> None:
     global _state
     if not _state.get("active"):

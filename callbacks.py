@@ -242,9 +242,11 @@ async def _handle_track(query, chat_id, context, args: list[str]) -> None:
         await _show_active_session(query)
 
     elif action in ("plan", "extend") and args[1:]:
-        # Both set planned_end to now + minutes; only the button label differs.
         try:
-            tracking_state.set_planned_end(int(args[1]))
+            if action == "plan":
+                tracking_state.set_planned_end(int(args[1]))
+            else:
+                tracking_state.extend_planned(int(args[1]))
         except ValueError as e:
             await query.answer(str(e), show_alert=True)
             return
